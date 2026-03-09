@@ -28,8 +28,9 @@ def _format_diagnostics(diagnostics: List[Dict[str, Any]]) -> str:
         param = row.get("parameter", "")
         val = row.get("value", "")
         ref = row.get("reference", "")
+        diff = row.get("diff", "")
         status = "ABNORMAL" if row.get("is_abnormal") else "Normal"
-        lines.append(f"- {param}: {val} (Ref: {ref}) [{status}]")
+        lines.append(f"- {param}: {val} (Ref: {ref}, Diff: {diff}) [{status}]")
     return "\n".join(lines)
 
 
@@ -41,7 +42,11 @@ def generate_summary(diagnostics: List[Dict[str, Any]]) -> str:
     system_prompt = (
         "You are an expert orthodontist. Review these cephalometric measurements. "
         "Write a purely objective 3-sentence clinical summary of the skeletal class, "
-        "growth pattern, and soft-tissue profile. Do not recommend treatments. "
+        "growth pattern, and soft-tissue profile. Do not recommend treatments.\n"
+        "CRITICAL RULES:\n"
+        "- Flag any measurement with |diff| > 4° or |diff| > 4mm as 'significant' and ensure it is mentioned in the summary.\n"
+        "- Never describe a finding as 'normal' if its |diff| > 2 units.\n"
+        "- Explicitly mention BOTH maxillary AND mandibular positions (e.g., both maxillary and mandibular retrusion) if they deviate from the norm.\n"
         "OUTPUT ONLY THE MEDICAL SUMMARY TEXT. Do not include any introductory phrases like 'Here is the summary' or conversational filler."
     )
     
