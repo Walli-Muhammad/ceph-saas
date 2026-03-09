@@ -1,8 +1,6 @@
 name: frontend
-description: "A new Flutter project."
-# The following line prevents the package from being accidentally published to
-# pub.dev using `flutter pub publish`. This is preferred for private packages.
-publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+description: "Ceph AI - Cephalometric Analysis Frontend"
+publish_to: 'none'
 
 # The following defines the version and build number for your application.
 # A version number is three numbers separated by dots, like 1.2.43
@@ -37,6 +35,9 @@ dependencies:
   flutter_riverpod: ^3.2.1
   http: ^1.6.0
   file_picker: ^10.3.10
+  http_parser: ^4.1.2
+  pdf: ^3.11.0
+  printing: ^5.13.1
 
 dev_dependencies:
   flutter_test:
