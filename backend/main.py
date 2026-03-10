@@ -237,9 +237,8 @@ async def analyze_full(
     }
     
     async def stream_generator():
-        # First, immediately yield all fast inference data
-        yield json.dumps(json_payload)
-        yield "|END_JSON|"
+        # First, immediately yield all fast inference data and the metadata marker
+        yield json.dumps(json_payload) + "---END_METADATA---"
         
         # Next, trigger the slower LLM and yield its chunks in real time
         from core.ml.llm_service import generate_summary_stream

@@ -201,60 +201,37 @@ class ApiService {
       buffer += chunk;
 
       if (!jsonParsed) {
-        int splitPos = buffer.indexOf('|END_JSON|');
-        String? jsonString;
-
-        if (splitPos != -1) {
-          jsonString = buffer.substring(0, splitPos).trim();
-          buffer = buffer.substring(splitPos + '|END_JSON|'.length);
-        } else {
-          final lastBrace = buffer.lastIndexOf('}');
-          if (lastBrace != -1) {
-            final possibleJson = buffer.substring(0, lastBrace + 1).trim();
-            try {
-              jsonDecode(possibleJson); // Test parse
-              jsonString = possibleJson;
-              buffer = buffer.substring(lastBrace + 1);
-            } catch (_) {
-              // Wait for more chunks
-            }
-          }
-        }
-
-        if (jsonString != null) {
+        if (buffer.contains('---END_METADATA---')) {
+          final parts = buffer.split('---END_METADATA---');
+          final jsonPart = parts[0];
+          final textPart = parts.length > 1 ? parts.sublist(1).join('---END_METADATA---') : '';
+          
           try {
-            final json = jsonDecode(jsonString) as Map<String, dynamic>;
+            final json = jsonDecode(jsonPart) as Map<String, dynamic>;
             final imgBytes = base64Decode(json['image_base64'] as String);
             currentResult = _parseResult(json, imgBytes);
             jsonParsed = true;
-            yield currentResult; // Yield first fast response
+            yield currentResult!;
+            
+            // Add remaining text to buffer to be processed below
+            buffer = textPart;
           } catch (e) {
-            throw ApiException(500, 'JSON Parse Error: $e\nData: $jsonString');
+            throw ApiException(500, 'JSON Parse Error: $e\nData: $jsonPart');
           }
         }
-      } 
+      }
       
-      // If JSON is already parsed, everything else is the streaming AI text
-      if (jsonParsed && currentResult != null) {
-        if (buffer.startsWith('|END_JSON|')) {
-          buffer = buffer.substring('|END_JSON|'.length);
-        } else if ('|END_JSON|'.startsWith(buffer) && buffer.isNotEmpty) {
-          // In case the separator chunk got split (e.g., "|" or "|END")
-          continue;
-        }
-
-        if (buffer.isNotEmpty) {
-          currentResult = FullAnalysisResult(
-            imageBytes: currentResult.imageBytes,
-            diagnosticsTable: currentResult.diagnosticsTable,
-            pixelSize: currentResult.pixelSize,
-            calibrationStatus: currentResult.calibrationStatus,
-            clinicalSummary: currentResult.clinicalSummary + buffer,
-            landmarks: currentResult.landmarks,
-          );
-          buffer = ''; // clear buffer after taking the chunk
-          yield currentResult; // Yield updated LLM streaming response
-        }
+      if (jsonParsed && buffer.isNotEmpty && currentResult != null) {
+        currentResult = FullAnalysisResult(
+          imageBytes: currentResult!.imageBytes,
+          diagnosticsTable: currentResult!.diagnosticsTable,
+          pixelSize: currentResult!.pixelSize,
+          calibrationStatus: currentResult!.calibrationStatus,
+          clinicalSummary: currentResult!.clinicalSummary + buffer,
+          landmarks: currentResult!.landmarks,
+        );
+        buffer = ''; // clear buffer after taking the chunk
+        yield currentResult!; // Yield updated LLM streaming response
       }
     }
     
