@@ -216,7 +216,10 @@ class ApiService {
             // Add remaining text to buffer to be processed below
             buffer = textPart;
           } catch (e) {
-            throw ApiException(500, 'JSON Parse Error: $e\nData: $jsonPart');
+            String snippet = jsonPart.length > 100 
+                ? '${jsonPart.substring(0, 50)}...${jsonPart.substring(jsonPart.length - 50)}' 
+                : jsonPart;
+            throw ApiException(500, 'JSON Parse Error (NEW BUILD): $e\nData Length: ${jsonPart.length}\nSnippet: $snippet');
           }
         }
       }
