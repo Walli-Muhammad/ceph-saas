@@ -34,10 +34,11 @@ def _format_diagnostics(diagnostics: List[Dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-def generate_summary(diagnostics: List[Dict[str, Any]]) -> str:
-    """Auto-generate a 3-sentence clinical summary of the skeletal class, growth pattern, and soft-tissue profile."""
+def generate_summary_stream(diagnostics: List[Dict[str, Any]]):
+    """Auto-generate a 3-sentence clinical summary, yielding chunks as they stream in."""
     if not client or not DEEPINFRA_API_KEY:
-        return "AI Summary unavailable (API key missing)."
+        yield "AI Summary unavailable (API key missing)."
+        return
         
     system_prompt = (
         "You are an expert orthodontist. Review these cephalometric measurements. "
@@ -61,11 +62,18 @@ def generate_summary(diagnostics: List[Dict[str, Any]]) -> str:
             ],
             temperature=0.3,
             max_tokens=200,
+            stream=True,  # Enable streaming
         )
-        return response.choices[0].message.content.strip()
+        for chunk in response:
+            if chunk.choices[0].delta.content is not None:
+                yield chunk.choices[0].delta.content
     except Exception as e:
-        logger.error(f"Error generating AI summary: {e}")
-        return "AI Summary generation failed."
+        logger.error(f"Error generating AI summary stream: {e}")
+        yield "AI Summary generation failed."
+
+def generate_summary(diagnostics: List[Dict[str, Any]]) -> str:
+    """Non-streaming fallback (retained for backward compatibility if needed)."""
+    return "".join([chunk for chunk in generate_summary_stream(diagnostics)])
 
 
 def ask_question(diagnostics: List[Dict[str, Any]], question: str) -> str:

@@ -226,18 +226,27 @@ async def analyze_full(
         for name, xy in result["landmarks"].items()
     }
 
-    from core.ml.llm_service import generate_summary
-    clinical_summary = generate_summary(result["diagnostics_table"])
-
-    return {
+    # Prepare JSON response payload containing all visual and statistical data
+    json_payload = {
         "message":            "Success",
         "diagnostics_table":  result["diagnostics_table"],
-        "clinical_summary":   clinical_summary,
         "image_base64":       base64.b64encode(jpeg_bytes).decode("utf-8"),
         "pixel_size":         active_pixel_size,
         "calibration_status": calibration_status,
         "landmarks":          landmarks_out,
     }
+    
+    async def stream_generator():
+        # First, immediately yield all fast inference data
+        yield json.dumps(json_payload)
+        yield "|END_JSON|"
+        
+        # Next, trigger the slower LLM and yield its chunks in real time
+        from core.ml.llm_service import generate_summary_stream
+        for chunk in generate_summary_stream(result["diagnostics_table"]):
+            yield chunk
+
+    return StreamingResponse(stream_generator(), media_type="text/plain")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
