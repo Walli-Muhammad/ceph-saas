@@ -9,10 +9,14 @@ from typing import Optional
 
 from pydantic import BaseModel
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from PIL import Image as _PILImage
+
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 import sys
 sys.path.append(str(Path(__file__).parent))
@@ -27,6 +31,11 @@ logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Rate Limiting
+# ─────────────────────────────────────────────────────────────────────────────
+limiter = Limiter(key_func=get_remote_address)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Lifespan
@@ -58,6 +67,9 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
@@ -134,7 +146,9 @@ async def analyze_visualize(file: UploadFile = File(...)):
 # POST /analyze/full  (base64 image + diagnostics table + landmarks)
 # ─────────────────────────────────────────────────────────────────────────────
 @app.post("/analyze/full", tags=["Inference"])
+@limiter.limit("5/minute; 50/day")
 async def analyze_full(
+    request:  Request,
     file:     UploadFile      = File(...),
     calib_x1: Optional[float] = Form(None),
     calib_y1: Optional[float] = Form(None),
