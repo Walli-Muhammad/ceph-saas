@@ -169,6 +169,8 @@ def _angle_at_vertex(
 # CephPredictor
 # ─────────────────────────────────────────────────────────────────────────────
 
+import os
+
 class CephPredictor:
     """
     End-to-end cephalometric inference.
@@ -184,12 +186,9 @@ class CephPredictor:
 
         # Resolve checkpoint path
         if checkpoint_path is None:
-            # Path(__file__) = backend/core/ml/inference.py
-            # .parent.parent.parent  = backend/
-            checkpoint_path = (
-                Path(__file__).parent.parent.parent
-                / "checkpoints" / "best_model.pth"
-            )
+            BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            WEIGHTS_DIR = os.getenv("WEIGHTS_DIR", os.path.join(BASE_DIR, "checkpoints"))
+            checkpoint_path = Path(os.path.join(WEIGHTS_DIR, "best_model.pth"))
 
         if not checkpoint_path.exists():
             raise FileNotFoundError(
