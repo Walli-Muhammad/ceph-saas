@@ -1173,8 +1173,13 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _annotatedImageWithNodes(Uint8List bytes) {
     return LayoutBuilder(
       builder: (ctx, constraints) {
-        final nw = (_nativeW ?? 1976).toDouble();
-        final nh = (_nativeH ?? 2225).toDouble();
+        final rawW = (_nativeW ?? 1976).toDouble();
+        final rawH = (_nativeH ?? 2225).toDouble();
+        
+        // Replicate logic from _compressImage to get the actual analyzed dimensions
+        final nw = rawW > 1024 ? 1024.0 : rawW;
+        final nh = rawW > 1024 ? (rawH * (1024.0 / rawW)) : rawH;
+
         final ww = constraints.maxWidth;
         final wh = constraints.maxHeight;
 
