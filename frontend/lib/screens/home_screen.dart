@@ -1173,31 +1173,24 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _annotatedImageWithNodes(Uint8List bytes) {
     return LayoutBuilder(
       builder: (ctx, constraints) {
+        // Backend returns an annotated JPEG at the compressed size (max 1024px wide).
+        // The landmark x/y coords are in that image's pixel space.
         final rawW = (_nativeW ?? 1976).toDouble();
         final rawH = (_nativeH ?? 2225).toDouble();
-        
-        // Replicate logic from _compressImage to get the actual analyzed dimensions
+        // Mirror the _compressImage resize applied before upload
         final nw = rawW > 1024 ? 1024.0 : rawW;
         final nh = rawW > 1024 ? (rawH * (1024.0 / rawW)) : rawH;
 
         final ww = constraints.maxWidth;
         final wh = constraints.maxHeight;
 
-        // BoxFit.contain letterbox math
-        final imageAR = nw / nh;
-        final widgetAR = ww / wh;
-        double renderedW, renderedH, dxOffset, dyOffset;
-        if (widgetAR > imageAR) {
-          renderedH = wh;
-          renderedW = wh * imageAR;
-          dxOffset = (ww - renderedW) / 2.0;
-          dyOffset = 0.0;
-        } else {
-          renderedW = ww;
-          renderedH = ww / imageAR;
-          dxOffset = 0.0;
-          dyOffset = (wh - renderedH) / 2.0;
-        }
+        // BoxFit.contain scale: same factor on both axes, anchored to the
+        // limiting dimension. This is what Flutter's Image widget does internally.
+        final scale = math.min(ww / nw, wh / nh);
+        final renderedW = nw * scale;
+        final renderedH = nh * scale;
+        final offsetX = (ww - renderedW) / 2.0;
+        final offsetY = (wh - renderedH) / 2.0;
 
         // Build landmark handles
         final handles = <Widget>[];
@@ -1205,8 +1198,9 @@ class _HomeScreenState extends State<HomeScreen> {
           for (final entry in _landmarks!.entries) {
             final name = entry.key;
             final lm = entry.value;
-            final sx = dxOffset + (lm.x / nw) * renderedW;
-            final sy = dyOffset + (lm.y / nh) * renderedH;
+            // Map raw image coords → screen coords
+            final sx = lm.x * scale + offsetX;
+            final sy = lm.y * scale + offsetY;
             const nodeSize = 14.0;
             handles.add(
               Positioned(
@@ -1214,10 +1208,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 top: sy - nodeSize / 2,
                 child: GestureDetector(
                   onPanUpdate: (d) {
-                    // Read the LIVE position (not the stale loop-captured `lm`)
                     final current = _landmarks![name]!;
-                    final dnx = d.delta.dx / renderedW * nw;
-                    final dny = d.delta.dy / renderedH * nh;
+                    // Reverse: screen delta → image-pixel delta
+                    final dnx = d.delta.dx / scale;
+                    final dny = d.delta.dy / scale;
                     setState(() {
                       _landmarks![name] = (
                         x: (current.x + dnx).clamp(0.0, nw),
@@ -1283,6 +1277,7 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       },
     );
+
   }
 
   Widget _loadingPanel() => Container(
