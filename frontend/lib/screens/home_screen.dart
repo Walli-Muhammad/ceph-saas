@@ -1194,6 +1194,23 @@ class _HomeScreenState extends State<HomeScreen> {
         final offsetX = (ww - nw * scale) / 2.0;
         final offsetY = (wh - nh * scale) / 2.0;
 
+        // Helper: derive LIVE scale+offset from the RenderBox at event time.
+        // This avoids using stale LayoutBuilder captures after setState rebuilds.
+        ({double sc, double ox, double oy, double nw, double nh}) _liveLayout() {
+          final box = _annotatedStackKey.currentContext
+              ?.findRenderObject() as RenderBox?;
+          final liveW = box?.size.width ?? ww;
+          final liveH = box?.size.height ?? wh;
+          final liveSc = math.min(liveW / nw, liveH / nh);
+          return (
+            sc: liveSc,
+            ox: (liveW - nw * liveSc) / 2.0,
+            oy: (liveH - nh * liveSc) / 2.0,
+            nw: nw,
+            nh: nh,
+          );
+        }
+
         // ── Build landmark handles ──────────────────────────────────
         const nodeSize = 14.0;
         final handles = <Widget>[];
@@ -1209,7 +1226,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 top: sy - nodeSize / 2,
                 child: GestureDetector(
                   onPanStart: (d) {
-                    // Convert global pointer pos → Stack-local pos
                     final box = _annotatedStackKey.currentContext
                         ?.findRenderObject() as RenderBox?;
                     final local = box != null
@@ -1222,14 +1238,15 @@ class _HomeScreenState extends State<HomeScreen> {
                     });
                   },
                   onPanUpdate: (d) {
-                    // Use absolute globalPosition → Stack-local to avoid delta drift.
                     final box = _annotatedStackKey.currentContext
                         ?.findRenderObject() as RenderBox?;
                     if (box == null) return;
                     final local = box.globalToLocal(d.globalPosition);
-                    // Reverse BoxFit.contain math to get image-pixel coordinates
-                    final newX = ((local.dx - offsetX) / scale).clamp(0.0, nw);
-                    final newY = ((local.dy - offsetY) / scale).clamp(0.0, nh);
+                    // Re-derive layout from the LIVE RenderBox size, not the
+                    // stale LayoutBuilder closure (avoids scatter after rebuild).
+                    final live = _liveLayout();
+                    final newX = ((local.dx - live.ox) / live.sc).clamp(0.0, live.nw);
+                    final newY = ((local.dy - live.oy) / live.sc).clamp(0.0, live.nh);
                     setState(() {
                       _landmarks![name] = (x: newX, y: newY);
                       _dragScreenPos = local;
@@ -1269,26 +1286,29 @@ class _HomeScreenState extends State<HomeScreen> {
           final ly = (_dragScreenPos.dy - loupeSize - 20).clamp(0.0, wh - loupeSize);
 
           // ── Loupe X-ray image background ────────────────────────
-          // Matrix4: zoom the main-canvas view so _dragScreenPos → loupe center.
-          final imgTransform = Matrix4.identity()
-            ..translate(loupeRadius - _dragScreenPos.dx * zoom,
-                        loupeRadius - _dragScreenPos.dy * zoom)
-            ..scale(zoom, zoom);
-
-          final loupeImageLayer = Transform(
-            transform: imgTransform,
-            alignment: Alignment.topLeft,
-            child: SizedBox(
-              width: ww,
-              height: wh,
-              child: Image.memory(
-                bytes,
-                fit: BoxFit.contain,
-                width: ww,
-                height: wh,
-              ),
+          // The annotated image renders at nw*scale × nh*scale inside the stack,
+          // offset by (offsetX, offsetY). In the loupe we render the image at
+          // nw*scale*zoom × nh*scale*zoom so each image pixel is zoom times larger,
+          // then translate so that the drag point maps to the loupe centre.
+          final imgW = nw * scale * zoom;
+          final imgH = nh * scale * zoom;
+          // Where does _dragScreenPos sit within the unzoomed rendered image?
+          final relX = _dragScreenPos.dx - offsetX; // 0..nw*scale
+          final relY = _dragScreenPos.dy - offsetY; // 0..nh*scale
+          final loupeImageLayer = Transform.translate(
+            offset: Offset(
+              loupeRadius - relX * zoom,  // place drag-x at loupe centre
+              loupeRadius - relY * zoom,
+            ),
+            child: Image.memory(
+              bytes,
+              width: imgW,
+              height: imgH,
+              fit: BoxFit.fill, // fill the explicit pixel dimensions exactly
             ),
           );
+
+
 
           // ── Nearby landmark dots & labels ────────────────────────
           final loupeItems = <Widget>[];
