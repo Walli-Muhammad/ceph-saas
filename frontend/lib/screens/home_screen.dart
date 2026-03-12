@@ -48,6 +48,11 @@ class _HomeScreenState extends State<HomeScreen> {
   // Key to measure the image widget render size
   final _imgKey = GlobalKey();
 
+  // ── Loupe (Precision Zoom) state ───────────────────────────────
+  bool _isDragging = false;
+  Offset _dragScreenPos = Offset.zero;
+  String _activeLandmarkName = '';
+
   // ── Pick image ────────────────────────────────────────────────────────────
   Future<void> _pickImage() async {
     final picked = await FilePicker.platform.pickFiles(
@@ -1173,53 +1178,62 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _annotatedImageWithNodes(Uint8List bytes) {
     return LayoutBuilder(
       builder: (ctx, constraints) {
-        // Backend returns an annotated JPEG at the compressed size (max 1024px wide).
-        // The landmark x/y coords are in that image's pixel space.
+        // Backend image is at most 1024px wide; landmark coords are in that space.
         final rawW = (_nativeW ?? 1976).toDouble();
         final rawH = (_nativeH ?? 2225).toDouble();
-        // Mirror the _compressImage resize applied before upload
         final nw = rawW > 1024 ? 1024.0 : rawW;
         final nh = rawW > 1024 ? (rawH * (1024.0 / rawW)) : rawH;
 
         final ww = constraints.maxWidth;
         final wh = constraints.maxHeight;
 
-        // BoxFit.contain scale: same factor on both axes, anchored to the
-        // limiting dimension. This is what Flutter's Image widget does internally.
+        // BoxFit.contain: uniform scale anchored to the limiting dimension.
         final scale = math.min(ww / nw, wh / nh);
-        final renderedW = nw * scale;
-        final renderedH = nh * scale;
-        final offsetX = (ww - renderedW) / 2.0;
-        final offsetY = (wh - renderedH) / 2.0;
+        final offsetX = (ww - nw * scale) / 2.0;
+        final offsetY = (wh - nh * scale) / 2.0;
 
-        // Build landmark handles
+        // ── Build landmark handles ──────────────────────────────────
+        const nodeSize = 14.0;
         final handles = <Widget>[];
         if (_landmarks != null) {
           for (final entry in _landmarks!.entries) {
             final name = entry.key;
             final lm = entry.value;
-            // Map raw image coords → screen coords
             final sx = lm.x * scale + offsetX;
             final sy = lm.y * scale + offsetY;
-            const nodeSize = 14.0;
             handles.add(
               Positioned(
                 left: sx - nodeSize / 2,
                 top: sy - nodeSize / 2,
                 child: GestureDetector(
-                  onPanUpdate: (d) {
-                    final current = _landmarks![name]!;
-                    // Reverse: screen delta → image-pixel delta
-                    final dnx = d.delta.dx / scale;
-                    final dny = d.delta.dy / scale;
+                  onPanStart: (_) {
                     setState(() {
-                      _landmarks![name] = (
-                        x: (current.x + dnx).clamp(0.0, nw),
-                        y: (current.y + dny).clamp(0.0, nh),
+                      _isDragging = true;
+                      _activeLandmarkName = name;
+                      _dragScreenPos = Offset(
+                        (_landmarks![name]!.x) * scale + offsetX,
+                        (_landmarks![name]!.y) * scale + offsetY,
                       );
                     });
                   },
-                  onPanEnd: (_) => _adjustLandmarks(),
+                  onPanUpdate: (d) {
+                    final current = _landmarks![name]!;
+                    final dnx = d.delta.dx / scale;
+                    final dny = d.delta.dy / scale;
+                    final newX = (current.x + dnx).clamp(0.0, nw);
+                    final newY = (current.y + dny).clamp(0.0, nh);
+                    setState(() {
+                      _landmarks![name] = (x: newX, y: newY);
+                      _dragScreenPos = Offset(
+                        newX * scale + offsetX,
+                        newY * scale + offsetY,
+                      );
+                    });
+                  },
+                  onPanEnd: (_) {
+                    setState(() => _isDragging = false);
+                    _adjustLandmarks();
+                  },
                   child: Container(
                     width: nodeSize,
                     height: nodeSize,
@@ -1238,6 +1252,178 @@ class _HomeScreenState extends State<HomeScreen> {
           }
         }
 
+        // ── Build Loupe overlay ────────────────────────────────────
+        const loupeSize = 200.0;
+        const zoom = 3.0;
+        const loupeRadius = loupeSize / 2;
+        // Threshold: only show landmarks within this screen-pixel radius in loupe
+        const captureRadius = loupeSize / zoom;
+
+        Widget? loupeWidget;
+        if (_isDragging && _landmarks != null) {
+          // Position loupe above and to the left of the finger
+          final lx = (_dragScreenPos.dx - loupeSize - 20).clamp(0.0, ww - loupeSize);
+          final ly = (_dragScreenPos.dy - loupeSize - 20).clamp(0.0, wh - loupeSize);
+
+          final loupeItems = <Widget>[];
+          // Grid lines for precision reference
+          loupeItems.add(CustomPaint(
+            size: const Size(loupeSize, loupeSize),
+            painter: _LoupePainter(),
+          ));
+
+          // Nearby landmarks magnified
+          if (_landmarks != null) {
+            for (final entry in _landmarks!.entries) {
+              final lmSx = entry.value.x * scale + offsetX;
+              final lmSy = entry.value.y * scale + offsetY;
+              final dx = lmSx - _dragScreenPos.dx;
+              final dy = lmSy - _dragScreenPos.dy;
+              final dist = math.sqrt(dx * dx + dy * dy);
+              if (dist > captureRadius) continue;
+
+              // Map to loupe space: center + zoomed offset
+              final lx2 = loupeRadius + dx * zoom;
+              final ly2 = loupeRadius + dy * zoom;
+              final isActive = entry.key == _activeLandmarkName;
+
+              loupeItems.add(Positioned(
+                left: lx2 - nodeSize / 2,
+                top: ly2 - nodeSize / 2,
+                child: Container(
+                  width: nodeSize,
+                  height: nodeSize,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: isActive
+                        ? const Color(0xBB00CFFF)
+                        : const Color(0x7700CFFF),
+                    border: Border.all(
+                      color: isActive ? Colors.white : Colors.white54,
+                      width: isActive ? 1.5 : 1.0,
+                    ),
+                  ),
+                ),
+              ));
+              // Label
+              loupeItems.add(Positioned(
+                left: lx2 + nodeSize / 2 + 2,
+                top: ly2 - 7,
+                child: Text(
+                  entry.key,
+                  style: TextStyle(
+                    color: isActive ? Colors.white : Colors.white70,
+                    fontSize: 11,
+                    fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                    shadows: const [
+                      Shadow(color: Colors.black, blurRadius: 4),
+                    ],
+                  ),
+                ),
+              ));
+            }
+          }
+
+          loupeWidget = Positioned(
+            left: lx,
+            top: ly,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header label
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: const Color(0xDD1A1A2E),
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(10),
+                      topRight: Radius.circular(10),
+                    ),
+                    border: Border.all(color: Colors.white24),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.zoom_in, color: Color(0xFF00CFFF), size: 13),
+                      const SizedBox(width: 4),
+                      Text(
+                        '$_activeLandmarkName Precision View',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // Loupe body
+                Container(
+                  width: loupeSize,
+                  height: loupeSize,
+                  decoration: BoxDecoration(
+                    color: const Color(0xDD111122),
+                    border: Border.all(color: Colors.white24),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Colors.black54,
+                        blurRadius: 12,
+                        offset: Offset(2, 4),
+                      ),
+                    ],
+                  ),
+                  child: ClipRect(
+                    child: Stack(
+                      children: [
+                        ...loupeItems,
+                        // Crosshair
+                        Positioned(
+                          left: loupeRadius - 0.5,
+                          top: 0,
+                          bottom: 0,
+                          child: Container(width: 1, color: Colors.white24),
+                        ),
+                        Positioned(
+                          top: loupeRadius - 0.5,
+                          left: 0,
+                          right: 0,
+                          child: Container(height: 1, color: Colors.white24),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                // Coordinate strip
+                Container(
+                  width: loupeSize,
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xEE0D0D1A),
+                    borderRadius: const BorderRadius.only(
+                      bottomLeft: Radius.circular(10),
+                      bottomRight: Radius.circular(10),
+                    ),
+                    border: Border.all(color: Colors.white24),
+                  ),
+                  child: Builder(builder: (_) {
+                    final lm = _landmarks![_activeLandmarkName];
+                    if (lm == null) return const SizedBox.shrink();
+                    return Text(
+                      '$_activeLandmarkName: ${lm.x.toStringAsFixed(1)},  ${lm.y.toStringAsFixed(1)} px',
+                      style: const TextStyle(
+                        color: Color(0xFF00CFFF),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        fontFamily: 'monospace',
+                      ),
+                    );
+                  }),
+                ),
+              ],
+            ),
+          );
+        }
+
         return ClipRRect(
           borderRadius: BorderRadius.circular(16),
           child: Stack(
@@ -1249,7 +1435,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 width: double.infinity,
                 height: double.infinity,
               ),
-              // Faint loading ring while waiting for adjust response
               if (_isAdjusting)
                 Container(
                   color: Colors.black.withOpacity(0.25),
@@ -1267,6 +1452,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               ...handles,
+              if (loupeWidget != null) loupeWidget,
               Positioned(
                 top: 10,
                 right: 10,
@@ -1277,7 +1463,6 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       },
     );
-
   }
 
   Widget _loadingPanel() => Container(
@@ -1677,4 +1862,27 @@ class _GaugePainter extends CustomPainter {
       target != old.target ||
       tolerance != old.tolerance ||
       isAbnormal != old.isAbnormal;
+}
+
+// ── Loupe grid painter ────────────────────────────────────────────────────────
+class _LoupePainter extends CustomPainter {
+  const _LoupePainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = const Color(0x22FFFFFF)
+      ..strokeWidth = 0.5;
+
+    const step = 20.0;
+    for (double x = 0; x <= size.width; x += step) {
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
+    }
+    for (double y = 0; y <= size.height; y += step) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _LoupePainter old) => false;
 }
