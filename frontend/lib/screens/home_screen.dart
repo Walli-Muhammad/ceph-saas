@@ -312,7 +312,7 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _isAdjusting = true);
     try {
       final res = await ApiService.adjustLandmarks(
-        imageBytes: _selectedBytes!,
+        imageBytes: ApiService.compressImage(_selectedBytes!),
         filename: _selectedFilename ?? 'image.jpg',
         landmarks: _landmarks!,
       );
@@ -1286,29 +1286,15 @@ class _HomeScreenState extends State<HomeScreen> {
           final ly = (_dragScreenPos.dy - loupeSize - 20).clamp(0.0, wh - loupeSize);
 
           // ── Loupe X-ray image background ────────────────────────
-          // The annotated image renders at nw*scale × nh*scale inside the stack,
-          // offset by (offsetX, offsetY). In the loupe we render the image at
-          // nw*scale*zoom × nh*scale*zoom so each image pixel is zoom times larger,
-          // then translate so that the drag point maps to the loupe centre.
+          // The annotated image renders at nw*scale × nh*scale, offset by
+          // (offsetX, offsetY). In the loupe we render the image at
+          // nw*scale*zoom × nh*scale*zoom, then position it so the drag-point
+          // maps to the loupe centre. Using Positioned (not Transform) so the
+          // Stack gives the image its full zoomed dimensions.
           final imgW = nw * scale * zoom;
           final imgH = nh * scale * zoom;
-          // Where does _dragScreenPos sit within the unzoomed rendered image?
-          final relX = _dragScreenPos.dx - offsetX; // 0..nw*scale
-          final relY = _dragScreenPos.dy - offsetY; // 0..nh*scale
-          final loupeImageLayer = Transform.translate(
-            offset: Offset(
-              loupeRadius - relX * zoom,  // place drag-x at loupe centre
-              loupeRadius - relY * zoom,
-            ),
-            child: Image.memory(
-              bytes,
-              width: imgW,
-              height: imgH,
-              fit: BoxFit.fill, // fill the explicit pixel dimensions exactly
-            ),
-          );
-
-
+          final relX = _dragScreenPos.dx - offsetX;
+          final relY = _dragScreenPos.dy - offsetY;
 
           // ── Nearby landmark dots & labels ────────────────────────
           final loupeItems = <Widget>[];
@@ -1407,9 +1393,16 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     child: ClipRect(
                       child: Stack(
+                        clipBehavior: Clip.hardEdge,
                         children: [
-                          // Layer 1: Zoomed X-ray image
-                          loupeImageLayer,
+                          // Layer 1: Zoomed X-ray image (Positioned gives full zoomed dimensions)
+                          Positioned(
+                            left: loupeRadius - relX * zoom,
+                            top: loupeRadius - relY * zoom,
+                            width: imgW,
+                            height: imgH,
+                            child: Image.memory(bytes, fit: BoxFit.fill),
+                          ),
                           // Layer 2: Precision grid
                           CustomPaint(
                             size: const Size(loupeSize, loupeSize),

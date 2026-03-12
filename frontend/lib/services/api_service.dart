@@ -154,6 +154,9 @@ FullAnalysisResult _parseResult(Map<String, dynamic> json, Uint8List imgBytes) {
 class ApiService {
   ApiService._();
 
+  /// Public image compression utility (matching the max 1024px upload).
+  static Uint8List compressImage(Uint8List bytes) => _compressImage(bytes);
+
   /// POST /analyze/full — initial analysis (runs PyTorch).
   /// Streams the parsed JSON immediately, then continues yielding updates
   /// as the AI clinical summary streams in.
