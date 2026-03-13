@@ -52,7 +52,7 @@ export default function Hero() {
                     <FadeUp delay={0.44}>
                         <div className="flex flex-wrap gap-4 pt-2">
                             <a
-                                href="#"
+                                href="https://ceph-saas-mvp.vercel.app"
                                 className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-purple-600 text-white font-semibold text-sm hover:opacity-90 active:scale-95 transition-all shadow-lg shadow-purple-500/20"
                             >
                                 Get Started Free
@@ -61,7 +61,7 @@ export default function Hero() {
                                 </svg>
                             </a>
                             <a
-                                href="#"
+                                href="https://ceph-saas-mvp.vercel.app"
                                 className="inline-flex items-center gap-2 px-6 py-3 rounded-xl glass text-white font-semibold text-sm hover:border-white/20 active:scale-95 transition-all"
                             >
                                 <svg className="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">

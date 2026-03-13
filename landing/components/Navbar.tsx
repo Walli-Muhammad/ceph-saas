@@ -44,11 +44,11 @@ export default function Navbar() {
 
                 {/* CTA */}
                 <div className="hidden md:flex items-center gap-3">
-                    <a href="#" className="text-sm text-slate-400 hover:text-white transition-colors px-4 py-2">
+                    <a href="https://ceph-saas-mvp.vercel.app" className="text-sm text-slate-400 hover:text-white transition-colors px-4 py-2">
                         Log In
                     </a>
                     <a
-                        href="#"
+                        href="https://ceph-saas-mvp.vercel.app"
                         className="text-sm font-semibold px-4 py-2 rounded-lg bg-gradient-to-r from-cyan-500 to-purple-600 text-white hover:opacity-90 transition-opacity"
                     >
                         Get Started Free
@@ -84,7 +84,7 @@ export default function Navbar() {
                             </a>
                         ))}
                         <a
-                            href="#"
+                            href="https://ceph-saas-mvp.vercel.app"
                             className="text-sm font-semibold px-4 py-2 rounded-lg bg-gradient-to-r from-cyan-500 to-purple-600 text-white text-center"
                         >
                             Get Started Free
