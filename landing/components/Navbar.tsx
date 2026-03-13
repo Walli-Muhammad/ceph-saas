@@ -6,7 +6,7 @@ const links = [
     { label: "Features", href: "#features" },
     { label: "Pricing", href: "#pricing" },
     { label: "Docs", href: "#" },
-    { label: "Demo", href: "#" },
+    { label: "Demo", href: "https://ceph-saas-mvp.vercel.app", external: true },
 ];
 
 export default function Navbar() {
@@ -35,7 +35,11 @@ export default function Navbar() {
                 <ul className="hidden md:flex items-center gap-8 text-sm text-slate-400">
                     {links.map((l) => (
                         <li key={l.label}>
-                            <a href={l.href} className="hover:text-white transition-colors duration-200">
+                            <a
+                                href={l.href}
+                                className="hover:text-white transition-colors duration-200"
+                                {...(l.external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+                            >
                                 {l.label}
                             </a>
                         </li>
@@ -44,12 +48,12 @@ export default function Navbar() {
 
                 {/* CTA */}
                 <div className="hidden md:flex items-center gap-3">
-                    <a href="https://ceph-saas-mvp.vercel.app" className="text-sm text-slate-400 hover:text-white transition-colors px-4 py-2">
+                    <a href="https://ceph-saas-mvp.vercel.app" target="_blank" rel="noopener noreferrer" className="text-sm text-slate-400 hover:text-white transition-colors px-4 py-2">
                         Log In
                     </a>
                     <a
-                        href="https://ceph-saas-mvp.vercel.app"
-                        className="text-sm font-semibold px-4 py-2 rounded-lg bg-gradient-to-r from-cyan-500 to-purple-600 text-white hover:opacity-90 transition-opacity"
+                        href="#pricing"
+                        className="text-sm font-semibold px-4 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-teal-500 text-white hover:opacity-90 transition-opacity"
                     >
                         Get Started Free
                     </a>
@@ -84,8 +88,8 @@ export default function Navbar() {
                             </a>
                         ))}
                         <a
-                            href="https://ceph-saas-mvp.vercel.app"
-                            className="text-sm font-semibold px-4 py-2 rounded-lg bg-gradient-to-r from-cyan-500 to-purple-600 text-white text-center"
+                            href="#pricing"
+                            className="text-sm font-semibold px-4 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-teal-500 text-white text-center"
                         >
                             Get Started Free
                         </a>

@@ -1,8 +1,24 @@
 @import "tailwindcss";
 
+/* ─────────────────────────────────────────────────────────────────────────
+   DESIGN TOKENS — extracted from Flutter app (home_screen.dart)
+   _dark  #1C1C2E  main background
+   _card  #252540  card / glass surface
+   _panel #1E1E35  secondary panel
+   _blue  #1A73E8  primary button / action accent
+   _teal  #00BFA5  success / normal indicator
+   _border #2E2E50 borders
+   ──────────────────────────────────────────────────────────────────────── */
 :root {
-  --cyan: #22d3ee;
-  --purple: #a855f7;
+  /* Primary accent — Flutter "Analyze" button blue */
+  --accent: #1A73E8;
+  --accent2: #00BFA5;
+  /* Flutter teal — used for success/active states  */
+
+  /* Keep a subtle cyan highlight for glow effects (close to teal) */
+  --cyan: #00BFA5;
+  /* Soft indigo for gradient pair instead of harsh purple */
+  --indigo: #4F6AD0;
 }
 
 html {
@@ -10,57 +26,78 @@ html {
 }
 
 body {
-  background-color: #020617;
+  /* Match Flutter _dark exactly */
+  background-color: #1C1C2E;
   color: #f1f5f9;
   font-family: var(--font-inter, system-ui, sans-serif);
   -webkit-font-smoothing: antialiased;
 }
 
-/* Glowing blob utility */
-.glow-cyan {
-  background: radial-gradient(circle, rgba(34,211,238,0.18) 0%, transparent 70%);
-}
-.glow-purple {
-  background: radial-gradient(circle, rgba(168,85,247,0.18) 0%, transparent 70%);
-}
-
-/* Glass card */
+/* Glass card — matches Flutter _card surface */
 .glass {
-  background: rgba(255,255,255,0.04);
+  background: rgba(37, 37, 64, 0.7);
+  /* #252540 at 70% = Flutter _card */
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255,255,255,0.08);
+  border: 1px solid rgba(46, 46, 80, 0.8);
+  /* Flutter _border */
 }
 
-/* Gradient text */
+/* Gradient text — blue → teal (matches Flutter accent pair) */
 .gradient-text {
-  background: linear-gradient(135deg, #22d3ee 0%, #a855f7 100%);
+  background: linear-gradient(135deg, #1A73E8 0%, #00BFA5 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
-/* Animated border glow on hover */
+/* Glow utilities updated to match Flutter accents */
+.glow-cyan {
+  background: radial-gradient(circle, rgba(0, 191, 165, 0.18) 0%, transparent 70%);
+}
+
+.glow-purple {
+  background: radial-gradient(circle, rgba(26, 115, 232, 0.18) 0%, transparent 70%);
+}
+
+/* Card hover — blue glow instead of purple */
 .card-hover-glow {
   transition: box-shadow 0.3s ease, border-color 0.3s ease;
 }
+
 .card-hover-glow:hover {
-  box-shadow: 0 0 24px rgba(34,211,238,0.15), 0 0 40px rgba(168,85,247,0.08);
-  border-color: rgba(34,211,238,0.3);
+  box-shadow: 0 0 28px rgba(26, 115, 232, 0.18), 0 0 48px rgba(0, 191, 165, 0.08);
+  border-color: rgba(26, 115, 232, 0.35);
 }
 
 @keyframes float {
-  0%, 100% { transform: translateY(0px); }
-  50%       { transform: translateY(-12px); }
+
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+
+  50% {
+    transform: translateY(-12px);
+  }
 }
+
 .animate-float {
   animation: float 4s ease-in-out infinite;
 }
 
 @keyframes pulse-glow {
-  0%, 100% { opacity: 0.5; }
-  50%       { opacity: 0.9; }
+
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+
+  50% {
+    opacity: 0.9;
+  }
 }
+
 .animate-pulse-glow {
   animation: pulse-glow 3s ease-in-out infinite;
 }

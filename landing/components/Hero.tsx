@@ -52,8 +52,8 @@ export default function Hero() {
                     <FadeUp delay={0.44}>
                         <div className="flex flex-wrap gap-4 pt-2">
                             <a
-                                href="https://ceph-saas-mvp.vercel.app"
-                                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-purple-600 text-white font-semibold text-sm hover:opacity-90 active:scale-95 transition-all shadow-lg shadow-purple-500/20"
+                                href="#pricing"
+                                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-teal-500 text-white font-semibold text-sm hover:opacity-90 active:scale-95 transition-all shadow-lg shadow-blue-500/20"
                             >
                                 Get Started Free
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -62,13 +62,15 @@ export default function Hero() {
                             </a>
                             <a
                                 href="https://ceph-saas-mvp.vercel.app"
+                                target="_blank"
+                                rel="noopener noreferrer"
                                 className="inline-flex items-center gap-2 px-6 py-3 rounded-xl glass text-white font-semibold text-sm hover:border-white/20 active:scale-95 transition-all"
                             >
-                                <svg className="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className="w-4 h-4 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
-                                Watch Demo
+                                Try Live Demo ↗
                             </a>
                         </div>
                     </FadeUp>
@@ -140,7 +142,7 @@ export default function Hero() {
                         <p className="text-lg font-bold text-purple-400">2.5s</p>
                     </motion.div>
                 </motion.div>
-            </div>
-        </section>
+            </div >
+        </section >
     );
 }
