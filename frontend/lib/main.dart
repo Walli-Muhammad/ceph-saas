@@ -15,11 +15,11 @@ class CephAiApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
-        colorSchemeSeed: const Color(0xFF1A73E8),
+        colorSchemeSeed: const Color(0xFF00BFA5),
         brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF1C1C2E),
+        scaffoldBackgroundColor: const Color(0xFF0A0E1A),
         appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF1C1C2E),
+          backgroundColor: Colors.transparent,
           elevation: 0,
           surfaceTintColor: Colors.transparent,
         ),

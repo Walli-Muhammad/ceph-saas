@@ -15,7 +15,29 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _glowController;
+  late Animation<double> _glowAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _glowController = AnimationController(
+      duration: const Duration(milliseconds: 3000),
+      vsync: this,
+    )..repeat(reverse: true);
+    _glowAnimation = Tween<double>(begin: 0.3, end: 0.6).animate(
+      CurvedAnimation(parent: _glowController, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _glowController.dispose();
+    _chatController.dispose();
+    super.dispose();
+  }
   // ── Analysis state ─────────────────────────────────────────────────────────
   Uint8List? _selectedBytes;
   String? _selectedFilename;
@@ -257,16 +279,19 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ── Design tokens ──────────────────────────────────────────────────────────
-  static const _dark = Color(0xFF1C1C2E);
-  static const _card = Color(0xFF252540);
-  static const _panel = Color(0xFF1E1E35);
-  static const _blue = Color(0xFF1A73E8);
-  static const _teal = Color(0xFF00BFA5);
-  static const _border = Color(0xFF2E2E50);
-  static const _normal = Color(0xFF00BFA5);
-  static const _warn = Color(0xFFFF6B35);
-  static const _green = Color(0xFF76FF03); // ruler line color
+  // ── Design tokens (Dark Slate with Accent Glows) ───────────────────────────
+  static const _dark = Color(0xFF0A0E1A); // Deep slate/near-black background
+  static const _card = Color(0xFF151A2E); // Slightly lighter card
+  static const _panel = Color(0xFF0F1428); // Panel background
+  static const _blue = Color(0xFF00B4D8); // Cyan accent
+  static const _purple = Color(0xFF9D4EDD); // Purple accent glow
+  static const _teal = Color(0xFF00FFA3); // Bright teal accent
+  static const _border = Color(0xFF1E2A4A); // Subtle border
+  static const _normal = Color(0xFF00FFA3); // Normal state
+  static const _warn = Color(0xFFFF6B35); // Warning state
+  static const _green = Color(0xFF76FF03); // Ruler line color
+  static const _glassBg = Color(0x0DFFFFFF); // Glass background (5% white)
+  static const _glassBorder = Color(0x26FFFFFF); // Glass border (15% white)
 
   // ── Analyze ───────────────────────────────────────────────────────────────
   Future<void> _analyze() async {
@@ -351,22 +376,52 @@ class _HomeScreenState extends State<HomeScreen> {
     backgroundColor: _dark,
     appBar: _appBar(),
     body: SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _header(),
-            const SizedBox(height: 12),
-            Expanded(child: _body()),
-            const SizedBox(height: 14),
-            if (_errorText != null) _errorBanner(),
-            if (!_isLoading) _actionButtons(),
-          ],
-        ),
+      child: Stack(
+        children: [
+          // Animated gradient glow blobs background
+          _gradientGlowBackground(),
+          // Main content
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _header(),
+                const SizedBox(height: 12),
+                Expanded(child: _body()),
+                const SizedBox(height: 14),
+                if (_errorText != null) _errorBanner(),
+                if (!_isLoading) _actionButtons(),
+              ],
+            ),
+          ),
+        ],
       ),
     ),
   );
+
+  // ── Animated Gradient Glow Background ──────────────────────────────────────
+  Widget _gradientGlowBackground() {
+    return AnimatedBuilder(
+      animation: _glowAnimation,
+      builder: (context, child) {
+        return Container(
+          decoration: BoxDecoration(
+            gradient: RadialGradient(
+              colors: [
+                _blue.withOpacity(_glowAnimation.value * 0.15),
+                _purple.withOpacity(_glowAnimation.value * 0.1),
+                Colors.transparent,
+              ],
+              stops: const [0.0, 0.5, 1.0],
+              center: const Alignment(0.3, 0.3),
+              radius: 1.5,
+            ),
+          ),
+        );
+      },
+    );
+  }
 
   // ── Central body ──────────────────────────────────────────────────────────
   Widget _body() {
@@ -412,37 +467,62 @@ class _HomeScreenState extends State<HomeScreen> {
           Positioned(
             top: 16,
             left: 16,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: _dark.withOpacity(0.9),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: _green.withOpacity(0.5)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.ads_click, color: _green, size: 20),
-                  const SizedBox(width: 10),
-                  Text(
-                    _calPoint1 == null
-                        ? 'Tap first point of ruler'
-                        : 'Tap second point of ruler',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: BackdropFilter(
+                filter: ui.ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
                   ),
-                  const SizedBox(width: 16),
-                  InkWell(
-                    onTap: _resetCalibration,
-                    child: const Icon(
-                      Icons.close,
-                      color: Colors.white54,
-                      size: 20,
-                    ),
+                  decoration: BoxDecoration(
+                    color: _dark.withOpacity(0.85),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: _green.withOpacity(0.5)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: _green.withOpacity(0.15),
+                        blurRadius: 12,
+                        spreadRadius: 0,
+                      ),
+                    ],
                   ),
-                ],
+                  child: Row(
+                    children: [
+                      Icon(Icons.ads_click, color: _green, size: 20),
+                      const SizedBox(width: 10),
+                      Text(
+                        _calPoint1 == null
+                            ? 'Tap first point of ruler'
+                            : 'Tap second point of ruler',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: _resetCalibration,
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              child: const Icon(
+                                Icons.close,
+                                color: Colors.white54,
+                                size: 20,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
@@ -451,31 +531,53 @@ class _HomeScreenState extends State<HomeScreen> {
           Positioned(
             top: 16,
             left: 16,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: _green.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: _green.withOpacity(0.4)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.check_circle, color: _green, size: 16),
-                  const SizedBox(width: 8),
-                  Text(
-                    '${_calMm}mm set',
-                    style: const TextStyle(
-                      color: _green,
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                    ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: BackdropFilter(
+                filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
                   ),
-                  const SizedBox(width: 12),
-                  InkWell(
-                    onTap: _resetCalibration,
-                    child: const Icon(Icons.close, color: _green, size: 16),
+                  decoration: BoxDecoration(
+                    color: _green.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: _green.withOpacity(0.4)),
                   ),
-                ],
+                  child: Row(
+                    children: [
+                      const Icon(Icons.check_circle, color: _green, size: 16),
+                      const SizedBox(width: 8),
+                      Text(
+                        '${_calMm}mm set',
+                        style: const TextStyle(
+                          color: _green,
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: _resetCalibration,
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              child: const Icon(
+                                Icons.close,
+                                color: _green,
+                                size: 16,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
@@ -485,22 +587,44 @@ class _HomeScreenState extends State<HomeScreen> {
             bottom: 20,
             left: 20,
             right: 20,
-            child: ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _dark.withOpacity(0.85),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  side: const BorderSide(color: Colors.white24),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () => setState(() => _isCalibrating = true),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    decoration: BoxDecoration(
+                      color: _dark.withOpacity(0.85),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: _glassBorder),
+                      boxShadow: [
+                        BoxShadow(
+                          color: _green.withOpacity(0.2),
+                          blurRadius: 12,
+                          spreadRadius: 0,
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.straighten, size: 20, color: _green),
+                        const SizedBox(width: 10),
+                        const Text(
+                          'Calibrate Scale (Optional)',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
-              icon: const Icon(Icons.straighten, size: 20),
-              label: const Text(
-                'Calibrate Scale (Optional)',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-              ),
-              onPressed: () => setState(() => _isCalibrating = true),
             ),
           ),
       ],
@@ -543,227 +667,279 @@ class _HomeScreenState extends State<HomeScreen> {
     double pixelSize,
     String calibrationStatus,
     String clinicalSummary,
-  ) => Container(
-    decoration: BoxDecoration(
-      color: _panel,
-      borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: _border),
-    ),
-    child: Column(
-      children: [
-        _panelHeader(pixelSize, rows, calibrationStatus),
-        const Divider(color: _border, height: 1),
-        Expanded(
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (clinicalSummary.isNotEmpty) _aiSummaryCard(clinicalSummary),
-                if (_chatAnswer != null)
-                  _chatResponseCard()
-                else
-                  ListView.separated(
-                    padding: EdgeInsets.zero,
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: rows.length,
-                    separatorBuilder: (_, __) =>
-                        const Divider(color: _border, height: 1),
-                    itemBuilder: (_, i) => _diagRow(rows[i]),
-                  ),
-              ],
+  ) => ClipRRect(
+    borderRadius: BorderRadius.circular(16),
+    child: BackdropFilter(
+      filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+      child: Container(
+        decoration: BoxDecoration(
+          color: _glassBg,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: _glassBorder),
+          boxShadow: [
+            BoxShadow(
+              color: _blue.withOpacity(0.1),
+              blurRadius: 20,
+              spreadRadius: 0,
             ),
-          ),
+          ],
         ),
-        if (clinicalSummary.isNotEmpty) _aiChatbotUI(),
-      ],
+        child: Column(
+          children: [
+            _panelHeader(pixelSize, rows, calibrationStatus),
+            const Divider(color: _glassBorder, height: 1),
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (clinicalSummary.isNotEmpty)
+                      _aiSummaryCard(clinicalSummary),
+                    if (_chatAnswer != null)
+                      _chatResponseCard()
+                    else
+                      ListView.separated(
+                        padding: EdgeInsets.zero,
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: rows.length,
+                        separatorBuilder: (_, __) =>
+                            const Divider(color: _glassBorder, height: 1),
+                        itemBuilder: (_, i) => _diagRow(rows[i]),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            if (clinicalSummary.isNotEmpty) _aiChatbotUI(),
+          ],
+        ),
+      ),
     ),
   );
 
   Widget _aiSummaryCard(String summary) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: _blue.withOpacity(0.08),
-        border: const Border(bottom: BorderSide(color: _border)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: _blue.withOpacity(0.08),
+            border: Border(bottom: BorderSide(color: _glassBorder)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('🤖', style: TextStyle(fontSize: 14)),
-              const SizedBox(width: 6),
-              const Text(
-                'AI Clinical Summary',
-                style: TextStyle(
-                  color: _blue,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 13,
-                ),
-              ),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: _blue.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: const Text(
-                  'Llama 3',
-                  style: TextStyle(
-                    color: _blue,
-                    fontSize: 9,
-                    fontWeight: FontWeight.w800,
+              Row(
+                children: [
+                  const Text('🤖', style: TextStyle(fontSize: 14)),
+                  const SizedBox(width: 6),
+                  const Text(
+                    'AI Clinical Summary',
+                    style: TextStyle(
+                      color: _blue,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
                   ),
+                  const Spacer(),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: BackdropFilter(
+                      filter: ui.ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: _blue.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: _glassBorder),
+                        ),
+                        child: const Text(
+                          'Llama 3',
+                          style: TextStyle(
+                            color: _blue,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                summary,
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 12,
+                  height: 1.4,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 6),
-          Text(
-            summary,
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 12,
-              height: 1.4,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
 
   Widget _chatResponseCard() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: _blue.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: _blue.withOpacity(0.3)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  '🤖 AI Response',
-                  style: TextStyle(
-                    color: _blue,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13,
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: _blue.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: _blue.withOpacity(0.3)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    '🤖 AI Response',
+                    style: TextStyle(
+                      color: _blue,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
                   ),
-                ),
-                InkWell(
-                  onTap: () {
-                    setState(() {
-                      _chatAnswer = null;
-                      _chatQuestion = ''; // Or empty? Yes, _chatQuestion = ''
-                    });
-                  },
-                  borderRadius: BorderRadius.circular(12),
-                  child: const Padding(
-                    padding: EdgeInsets.all(2.0),
-                    child: Icon(Icons.close, color: Colors.white54, size: 18),
+                  InkWell(
+                    onTap: () {
+                      setState(() {
+                        _chatAnswer = null;
+                        _chatQuestion = '';
+                      });
+                    },
+                    borderRadius: BorderRadius.circular(12),
+                    child: const Padding(
+                      padding: EdgeInsets.all(2.0),
+                      child: Icon(Icons.close, color: Colors.white54, size: 18),
+                    ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Text(
-              _chatAnswer!,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 13,
-                height: 1.4,
+                ],
               ),
-            ),
-          ],
+              const SizedBox(height: 10),
+              Text(
+                _chatAnswer!,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  height: 1.4,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
   Widget _aiChatbotUI() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: const BoxDecoration(
-        color: _card,
-        border: Border(top: BorderSide(color: _border)),
-        borderRadius: BorderRadius.only(
-          bottomLeft: Radius.circular(16),
-          bottomRight: Radius.circular(16),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (_isChatLoading)
-            const Padding(
-              padding: EdgeInsets.only(bottom: 10),
-              child: Center(
-                child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: _blue,
-                  ),
-                ),
-              ),
-            ),
-          Row(
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: _glassBg,
+            border: Border(top: BorderSide(color: _glassBorder)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(
-                child: TextField(
-                  controller: _chatController,
-                  style: const TextStyle(color: Colors.white, fontSize: 13),
-                  decoration: InputDecoration(
-                    hintText: 'Ask AI about this X-Ray...',
-                    hintStyle: const TextStyle(
-                      color: Colors.white38,
-                      fontSize: 13,
+              if (_isChatLoading)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Center(
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(_blue),
+                      ),
                     ),
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 10,
-                    ),
-                    filled: true,
-                    fillColor: _dark,
-                    border: OutlineInputBorder(
+                  ),
+                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: ClipRRect(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide.none,
+                      child: BackdropFilter(
+                        filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: _dark.withOpacity(0.5),
+                            border:
+                                Border.all(color: _glassBorder.withOpacity(0.5)),
+                          ),
+                          child: TextField(
+                            controller: _chatController,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                            ),
+                            decoration: InputDecoration(
+                              hintText: 'Ask AI about this X-Ray...',
+                              hintStyle: const TextStyle(
+                                color: Colors.white38,
+                                fontSize: 13,
+                              ),
+                              isDense: true,
+                              contentPadding: EdgeInsets.zero,
+                              border: InputBorder.none,
+                            ),
+                            onSubmitted: (_) => _askAi(),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
-                  onSubmitted: (_) => _askAi(),
-                ),
-              ),
-              const SizedBox(width: 8),
-              InkWell(
-                onTap: _isChatLoading ? null : _askAi,
-                borderRadius: BorderRadius.circular(8),
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: _blue,
+                  const SizedBox(width: 8),
+                  ClipRRect(
                     borderRadius: BorderRadius.circular(8),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: _isChatLoading ? null : _askAi,
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [_blue, _teal],
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(
+                            Icons.send_rounded,
+                            color: Colors.white,
+                            size: 18,
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
-                  child: const Icon(
-                    Icons.send_rounded,
-                    color: Colors.white,
-                    size: 18,
-                  ),
-                ),
+                ],
               ),
             ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -802,165 +978,192 @@ class _HomeScreenState extends State<HomeScreen> {
     String calibrationStatus,
   ) {
     final abnCount = rows.where((r) => r.isAbnormal).length;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: _teal.withOpacity(0.10),
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ── Row 1: title + PDF icon (always fits) ───────────────────────
-          Row(
-            children: [
-              const Icon(Icons.analytics_outlined, color: _teal, size: 18),
-              const SizedBox(width: 8),
-              const Expanded(
-                child: Text(
-                  'Clinical Report',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 14,
-                  ),
-                ),
-              ),
-              Tooltip(
-                message: 'Export PDF Report',
-                child: InkWell(
-                  onTap: _exportPdf,
-                  borderRadius: BorderRadius.circular(6),
-                  child: Container(
-                    padding: const EdgeInsets.all(5),
-                    decoration: BoxDecoration(
-                      color: _blue.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: const Icon(
-                      Icons.picture_as_pdf_rounded,
-                      color: _blue,
-                      size: 16,
-                    ),
-                  ),
-                ),
-              ),
-            ],
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: _teal.withOpacity(0.10),
+            border: Border(bottom: BorderSide(color: _glassBorder)),
           ),
-          const SizedBox(height: 6),
-          // ── Row 2: chips in a Wrap (never overflows) ────────────────────
-          Wrap(
-            spacing: 6,
-            runSpacing: 4,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (abnCount > 0)
-                _miniChip('$abnCount abnormal', _warn)
-              else
-                _miniChip('All normal', _normal),
-
-              // Calibration validation feedback chip
-              if (calibrationStatus == 'accepted')
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 3,
+              // ── Row 1: title + PDF icon (always fits) ───────────────────────
+              Row(
+                children: [
+                  const Icon(Icons.analytics_outlined, color: _teal, size: 18),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'Clinical Report',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                      ),
+                    ),
                   ),
-                  decoration: BoxDecoration(
-                    color: _green.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: _green.withOpacity(0.4)),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.check_circle, color: _green, size: 12),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${pixelSize.toStringAsFixed(3)} mm/px',
-                        style: const TextStyle(
-                          color: _green,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: _exportPdf,
+                        child: Container(
+                          padding: const EdgeInsets.all(5),
+                          decoration: BoxDecoration(
+                            color: _blue.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: _glassBorder),
+                          ),
+                          child: const Icon(
+                            Icons.picture_as_pdf_rounded,
+                            color: _blue,
+                            size: 16,
+                          ),
                         ),
                       ),
-                    ],
+                    ),
                   ),
-                )
-              else if (calibrationStatus == 'rejected')
-                Tooltip(
-                  message:
-                      'Ruler dimension was implausible (>15% variance from dataset average). Used standard calibration fallback.',
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: _warn.withOpacity(0.15),
+                ],
+              ),
+              const SizedBox(height: 6),
+              // ── Row 2: chips in a Wrap (never overflows) ────────────────────
+              Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: [
+                  if (abnCount > 0)
+                    _miniChip('$abnCount abnormal', _warn)
+                  else
+                    _miniChip('All normal', _normal),
+
+                  // Calibration validation feedback chip
+                  if (calibrationStatus == 'accepted')
+                    ClipRRect(
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: _warn.withOpacity(0.4)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.warning_amber_rounded,
-                          color: _warn,
-                          size: 12,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          '${pixelSize.toStringAsFixed(3)} mm/px',
-                          style: const TextStyle(
-                            color: _warn,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
+                      child: BackdropFilter(
+                        filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: _green.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(12),
+                            border:
+                                Border.all(color: _green.withOpacity(0.4)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.check_circle,
+                                  color: _green, size: 12),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${pixelSize.toStringAsFixed(3)} mm/px',
+                                style: const TextStyle(
+                                  color: _green,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-                )
-              else if (calibrationStatus == 'accepted_no_csv')
-                Tooltip(
-                  message:
-                      'Dataset default not available. Trusting manual ruler scale fully.',
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: _green.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: _green.withOpacity(0.4)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.info_outline, color: _green, size: 12),
-                        const SizedBox(width: 4),
-                        Text(
-                          '${pixelSize.toStringAsFixed(3)} mm/px',
-                          style: const TextStyle(
-                            color: _green,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
+                      ),
+                    )
+                  else if (calibrationStatus == 'rejected')
+                    Tooltip(
+                      message:
+                          'Ruler dimension was implausible (>15% variance from dataset average). Used standard calibration fallback.',
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: BackdropFilter(
+                          filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: _warn.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: _warn.withOpacity(0.4)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.warning_amber_rounded,
+                                    color: _warn, size: 12),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '${pixelSize.toStringAsFixed(3)} mm/px',
+                                  style: const TextStyle(
+                                    color: _warn,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                      ],
+                      ),
+                    )
+                  else if (calibrationStatus == 'accepted_no_csv')
+                    Tooltip(
+                      message:
+                          'Dataset default not available. Trusting manual ruler scale fully.',
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: BackdropFilter(
+                          filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: _green.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: _green.withOpacity(0.4)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.info_outline,
+                                    color: _green, size: 12),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '${pixelSize.toStringAsFixed(3)} mm/px',
+                                  style: const TextStyle(
+                                    color: _green,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    )
+                  else
+                    _miniChip(
+                      '${pixelSize.toStringAsFixed(3)} mm/px',
+                      Colors.white38,
                     ),
-                  ),
-                )
-              else
-                _miniChip(
-                  '${pixelSize.toStringAsFixed(3)} mm/px',
-                  Colors.white38,
-                ),
+                ],
+              ),
             ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -979,6 +1182,13 @@ class _HomeScreenState extends State<HomeScreen> {
             decoration: BoxDecoration(
               color: diffColor,
               borderRadius: BorderRadius.circular(2),
+              boxShadow: [
+                BoxShadow(
+                  color: diffColor.withOpacity(0.3),
+                  blurRadius: 8,
+                  spreadRadius: 0,
+                ),
+              ],
             ),
           ),
           Expanded(
@@ -1006,22 +1216,32 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                     const SizedBox(width: 10),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: diffColor.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        r.diff,
-                        style: TextStyle(
-                          color: diffColor,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          fontFeatures: const [FontFeature.tabularFigures()],
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: BackdropFilter(
+                        filter: ui.ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: diffColor.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: diffColor.withOpacity(0.3),
+                            ),
+                          ),
+                          child: Text(
+                            r.diff,
+                            style: TextStyle(
+                              color: diffColor,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              fontFeatures:
+                                  const [FontFeature.tabularFigures()],
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -1119,42 +1339,61 @@ class _HomeScreenState extends State<HomeScreen> {
   // ── Image panels ──────────────────────────────────────────────────────────
   Widget _emptyPanel() => GestureDetector(
     onTap: _pickImage,
-    child: Container(
-      decoration: BoxDecoration(
-        color: _card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _blue.withOpacity(0.35), width: 1.5),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: _blue.withOpacity(0.12),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.add_photo_alternate_outlined,
-              color: _blue,
-              size: 48,
-            ),
+    child: ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          decoration: BoxDecoration(
+            color: _glassBg,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: _blue.withOpacity(0.35), width: 1.5),
+            boxShadow: [
+              BoxShadow(
+                color: _blue.withOpacity(0.15),
+                blurRadius: 20,
+                spreadRadius: 0,
+              ),
+            ],
           ),
-          const SizedBox(height: 16),
-          const Text(
-            'Tap to Select X-Ray',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              ClipOval(
+                child: BackdropFilter(
+                  filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                  child: Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: _blue.withOpacity(0.12),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: _glassBorder),
+                    ),
+                    child: const Icon(
+                      Icons.add_photo_alternate_outlined,
+                      color: _blue,
+                      size: 48,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Tap to Select X-Ray',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'JPG · PNG · BMP',
+                style: TextStyle(color: Colors.white38, fontSize: 12),
+              ),
+            ],
           ),
-          const SizedBox(height: 6),
-          const Text(
-            'JPG · PNG · BMP',
-            style: TextStyle(color: Colors.white38, fontSize: 12),
-          ),
-        ],
+        ),
       ),
     ),
   );
@@ -1256,17 +1495,43 @@ class _HomeScreenState extends State<HomeScreen> {
                     setState(() => _isDragging = false);
                     _adjustLandmarks();
                   },
-                  child: Container(
-                    width: nodeSize,
-                    height: nodeSize,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: const Color(0x5500CFFF),
-                      border: Border.all(
-                        color: Colors.white.withOpacity(0.85),
-                        width: 1.0,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      // Solid red landmark dot (visible at all times)
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.redAccent,
+                          border: Border.all(
+                            color: Colors.white,
+                            width: 1.5,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.redAccent.withOpacity(0.6),
+                              blurRadius: 6,
+                              spreadRadius: 0,
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
+                      // Larger glassy blue handle for dragging (hit target)
+                      Container(
+                        width: nodeSize,
+                        height: nodeSize,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: _blue.withOpacity(0.4),
+                          border: Border.all(
+                            color: Colors.white.withOpacity(0.6),
+                            width: 1.0,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -1313,31 +1578,73 @@ class _HomeScreenState extends State<HomeScreen> {
             loupeItems.add(Positioned(
               left: lx2 - nodeSize / 2,
               top: ly2 - nodeSize / 2,
-              child: Container(
-                width: nodeSize,
-                height: nodeSize,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: isActive
-                      ? const Color(0xBB00CFFF)
-                      : const Color(0x7700CFFF),
-                  border: Border.all(
-                    color: isActive ? Colors.white : Colors.white54,
-                    width: isActive ? 1.5 : 1.0,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  // Solid red landmark dot in loupe
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.redAccent,
+                      border: Border.all(
+                        color: Colors.white,
+                        width: 1.5,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.redAccent.withOpacity(0.6),
+                          blurRadius: 6,
+                          spreadRadius: 0,
+                        ),
+                      ],
+                    ),
                   ),
-                ),
+                  // Larger glassy blue handle for visibility
+                  Container(
+                    width: nodeSize,
+                    height: nodeSize,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: isActive
+                          ? _blue.withOpacity(0.5)
+                          : _blue.withOpacity(0.3),
+                      border: Border.all(
+                        color: isActive ? Colors.white : Colors.white54,
+                        width: isActive ? 1.5 : 1.0,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ));
             loupeItems.add(Positioned(
               left: lx2 + nodeSize / 2 + 2,
               top: ly2 - 7,
-              child: Text(
-                entry.key,
-                style: TextStyle(
-                  color: isActive ? Colors.white : Colors.white70,
-                  fontSize: 11,
-                  fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-                  shadows: const [Shadow(color: Colors.black, blurRadius: 4)],
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: BackdropFilter(
+                  filter: ui.ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 4,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _dark.withOpacity(0.6),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: _glassBorder),
+                    ),
+                    child: Text(
+                      entry.key,
+                      style: TextStyle(
+                        color: isActive ? Colors.white : Colors.white70,
+                        fontSize: 11,
+                        fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ));
@@ -1350,109 +1657,131 @@ class _HomeScreenState extends State<HomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Header
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: const Color(0xDD1A1A2E),
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(10),
-                      topRight: Radius.circular(10),
-                    ),
-                    border: Border.all(color: Colors.white24),
+                ClipRRect(
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(10),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.zoom_in, color: Color(0xFF00CFFF), size: 13),
-                      const SizedBox(width: 4),
-                      Text(
-                        '$_activeLandmarkName Precision View',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                        ),
+                  child: BackdropFilter(
+                    filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
                       ),
-                    ],
-                  ),
-                ),
-                // Loupe body: real X-ray + grid + dots + crosshair
-                SizedBox(
-                  width: loupeSize,
-                  height: loupeSize,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.white24),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Colors.black54,
-                          blurRadius: 12,
-                          offset: Offset(2, 4),
-                        ),
-                      ],
-                    ),
-                    child: ClipRect(
-                      child: Stack(
-                        clipBehavior: Clip.hardEdge,
+                      decoration: BoxDecoration(
+                        color: _dark.withOpacity(0.8),
+                        border: Border.all(color: _glassBorder),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          // Layer 1: Zoomed X-ray image (Positioned gives full zoomed dimensions)
-                          Positioned(
-                            left: loupeRadius - relX * zoom,
-                            top: loupeRadius - relY * zoom,
-                            width: imgW,
-                            height: imgH,
-                            child: Image.memory(bytes, fit: BoxFit.fill),
+                          Icon(
+                            Icons.zoom_in,
+                            color: _blue,
+                            size: 13,
                           ),
-                          // Layer 2: Precision grid
-                          CustomPaint(
-                            size: const Size(loupeSize, loupeSize),
-                            painter: _LoupePainter(),
-                          ),
-                          // Layer 3: Nearby landmark dots + labels
-                          ...loupeItems,
-                          // Layer 4: Crosshair
-                          Positioned(
-                            left: loupeRadius - 0.5,
-                            top: 0,
-                            bottom: 0,
-                            child: Container(width: 1, color: Colors.white30),
-                          ),
-                          Positioned(
-                            top: loupeRadius - 0.5,
-                            left: 0,
-                            right: 0,
-                            child: Container(height: 1, color: Colors.white30),
+                          const SizedBox(width: 4),
+                          Text(
+                            '$_activeLandmarkName Precision View',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ],
                       ),
                     ),
                   ),
                 ),
-                // Coordinate strip
-                Container(
-                  width: loupeSize,
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: const Color(0xEE0D0D1A),
-                    borderRadius: const BorderRadius.only(
-                      bottomLeft: Radius.circular(10),
-                      bottomRight: Radius.circular(10),
-                    ),
-                    border: Border.all(color: Colors.white24),
-                  ),
-                  child: Builder(builder: (_) {
-                    final lm = _landmarks![_activeLandmarkName];
-                    if (lm == null) return const SizedBox.shrink();
-                    return Text(
-                      '$_activeLandmarkName: ${lm.x.toStringAsFixed(1)},  ${lm.y.toStringAsFixed(1)} px',
-                      style: const TextStyle(
-                        color: Color(0xFF00CFFF),
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        fontFamily: 'monospace',
+                // Loupe body: real X-ray + grid + dots + crosshair
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: BackdropFilter(
+                    filter: ui.ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+                    child: Container(
+                      width: loupeSize,
+                      height: loupeSize,
+                      decoration: BoxDecoration(
+                        border: Border.all(color: _glassBorder),
+                        boxShadow: [
+                          BoxShadow(
+                            color: _blue.withOpacity(0.2),
+                            blurRadius: 12,
+                            spreadRadius: 0,
+                          ),
+                        ],
                       ),
-                    );
-                  }),
+                      child: ClipRect(
+                        child: Stack(
+                          clipBehavior: Clip.hardEdge,
+                          children: [
+                            // Layer 1: Zoomed X-ray image (Positioned gives full zoomed dimensions)
+                            Positioned(
+                              left: loupeRadius - relX * zoom,
+                              top: loupeRadius - relY * zoom,
+                              width: imgW,
+                              height: imgH,
+                              child: Image.memory(bytes, fit: BoxFit.fill),
+                            ),
+                            // Layer 2: Precision grid
+                            CustomPaint(
+                              size: const Size(loupeSize, loupeSize),
+                              painter: _LoupePainter(),
+                            ),
+                            // Layer 3: Nearby landmark dots + labels
+                            ...loupeItems,
+                            // Layer 4: Crosshair
+                            Positioned(
+                              left: loupeRadius - 0.5,
+                              top: 0,
+                              bottom: 0,
+                              child: Container(width: 1, color: Colors.white30),
+                            ),
+                            Positioned(
+                              top: loupeRadius - 0.5,
+                              left: 0,
+                              right: 0,
+                              child: Container(height: 1, color: Colors.white30),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                // Coordinate strip
+                ClipRRect(
+                  borderRadius: const BorderRadius.vertical(
+                    bottom: Radius.circular(10),
+                  ),
+                  child: BackdropFilter(
+                    filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                    child: Container(
+                      width: loupeSize,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _dark.withOpacity(0.85),
+                        border: Border.all(color: _glassBorder),
+                      ),
+                      child: Builder(builder: (_) {
+                        final lm = _landmarks![_activeLandmarkName];
+                        if (lm == null) return const SizedBox.shrink();
+                        return Text(
+                          '$_activeLandmarkName: ${lm.x.toStringAsFixed(1)},  ${lm.y.toStringAsFixed(1)} px',
+                          style: TextStyle(
+                            color: _blue,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            fontFamily: 'monospace',
+                          ),
+                        );
+                      }),
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -1502,75 +1831,123 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
 
-  Widget _loadingPanel() => Container(
-    decoration: BoxDecoration(
-      color: _card,
-      borderRadius: BorderRadius.circular(16),
-    ),
-    child: Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        const SizedBox(
-          width: 72,
-          height: 72,
-          child: CircularProgressIndicator(
-            strokeWidth: 4,
-            valueColor: AlwaysStoppedAnimation<Color>(_teal),
-          ),
+  Widget _loadingPanel() => ClipRRect(
+    borderRadius: BorderRadius.circular(16),
+    child: BackdropFilter(
+      filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+      child: Container(
+        decoration: BoxDecoration(
+          color: _glassBg,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: _glassBorder),
+          boxShadow: [
+            BoxShadow(
+              color: _teal.withOpacity(0.15),
+              blurRadius: 20,
+              spreadRadius: 0,
+            ),
+          ],
         ),
-        const SizedBox(height: 24),
-        const Text(
-          'AI is analyzing X-ray...',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-          ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: 72,
+              height: 72,
+              child: CircularProgressIndicator(
+                strokeWidth: 4,
+                valueColor: AlwaysStoppedAnimation<Color>(_teal),
+              ),
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              'AI is analyzing X-ray...',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 40),
+              child: Text(
+                'The first inference can take up to 60 seconds while the GPU warms up.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white38, fontSize: 12),
+              ),
+            ),
+          ],
         ),
-        const SizedBox(height: 8),
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 40),
-          child: Text(
-            'The first inference can take up to 60 seconds while the GPU warms up.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white38, fontSize: 12),
-          ),
-        ),
-      ],
+      ),
     ),
   );
 
   // ── AppBar ─────────────────────────────────────────────────────────────────
   PreferredSizeWidget _appBar() => AppBar(
-    backgroundColor: _dark,
+    backgroundColor: Colors.transparent,
     elevation: 0,
+    surfaceTintColor: Colors.transparent,
     title: Row(
       children: [
-        Container(
-          padding: const EdgeInsets.all(6),
-          decoration: BoxDecoration(
-            color: _blue.withOpacity(0.15),
-            borderRadius: BorderRadius.circular(8),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: BackdropFilter(
+            filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+            child: Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: _glassBg,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: _glassBorder),
+              ),
+              child: const Icon(Icons.biotech_rounded, color: _teal, size: 22),
+            ),
           ),
-          child: const Icon(Icons.biotech_rounded, color: _teal, size: 22),
         ),
         const SizedBox(width: 10),
-        const Text(
-          'Ceph AI Analysis',
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.4,
+        ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: BackdropFilter(
+            filter: ui.ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: _glassBg,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: _glassBorder),
+              ),
+              child: const Text(
+                'Ceph AI Analysis',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.4,
+                ),
+              ),
+            ),
           ),
         ),
       ],
     ),
     actions: [
       if (_result != null || _selectedBytes != null)
-        IconButton(
-          icon: const Icon(Icons.refresh_rounded, color: Colors.white54),
-          tooltip: 'Reset',
-          onPressed: _reset,
+        ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: _reset,
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                child: const Icon(
+                  Icons.refresh_rounded,
+                  color: Colors.white54,
+                ),
+              ),
+            ),
+          ),
         ),
     ],
   );
@@ -1587,43 +1964,73 @@ class _HomeScreenState extends State<HomeScreen> {
         ? 'Tap "Analyze" to scan image'
         : 'Select a lateral cephalogram from your gallery';
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 22,
-            fontWeight: FontWeight.bold,
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: _glassBg,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: _glassBorder),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                sub,
+                style: const TextStyle(color: Colors.white54, fontSize: 13),
+              ),
+            ],
           ),
         ),
-        const SizedBox(height: 4),
-        Text(sub, style: const TextStyle(color: Colors.white54, fontSize: 13)),
-      ],
+      ),
     );
   }
 
   // ── Error + Buttons ───────────────────────────────────────────────────────
-  Widget _errorBanner() => Container(
-    margin: const EdgeInsets.only(bottom: 12),
-    padding: const EdgeInsets.all(14),
-    decoration: BoxDecoration(
-      color: const Color(0xFF4E1A1A),
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: Colors.redAccent.withOpacity(0.5)),
-    ),
-    child: Row(
-      children: [
-        const Icon(Icons.error_outline, color: Colors.redAccent, size: 20),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(
-            _errorText!,
-            style: const TextStyle(color: Colors.redAccent, fontSize: 13),
-          ),
+  Widget _errorBanner() => ClipRRect(
+    borderRadius: BorderRadius.circular(12),
+    child: BackdropFilter(
+      filter: ui.ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: const Color(0xFF4E1A1A).withOpacity(0.9),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.redAccent.withOpacity(0.5)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.redAccent.withOpacity(0.2),
+              blurRadius: 12,
+              spreadRadius: 0,
+            ),
+          ],
         ),
-      ],
+        child: Row(
+          children: [
+            const Icon(Icons.error_outline, color: Colors.redAccent, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                _errorText!,
+                style: const TextStyle(color: Colors.redAccent, fontSize: 13),
+              ),
+            ),
+          ],
+        ),
+      ),
     ),
   );
 
@@ -1664,62 +2071,126 @@ class _HomeScreenState extends State<HomeScreen> {
     required IconData icon,
     required VoidCallback onTap,
     required Color color,
-  }) => ElevatedButton.icon(
-    style: ElevatedButton.styleFrom(
-      backgroundColor: color,
-      foregroundColor: Colors.white,
-      minimumSize: const Size.fromHeight(52),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      elevation: 0,
-    ),
-    icon: Icon(icon, size: 20),
-    label: Text(
-      label,
-      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-    ),
-    onPressed: onTap,
-  );
-
-  Widget _secondaryBtn({required String label, required VoidCallback onTap}) =>
-      OutlinedButton(
-        style: OutlinedButton.styleFrom(
-          foregroundColor: Colors.white70,
-          minimumSize: const Size.fromHeight(48),
-          side: const BorderSide(color: Colors.white24),
-          shape: RoundedRectangleBorder(
+  }) => ClipRRect(
+    borderRadius: BorderRadius.circular(14),
+    child: Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(colors: [color, color.withOpacity(0.8)]),
             borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: color.withOpacity(0.4),
+                blurRadius: 12,
+                spreadRadius: 0,
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 20, color: Colors.white),
+              const SizedBox(width: 10),
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+            ],
           ),
         ),
-        onPressed: onTap,
-        child: Text(label),
-      );
-
-  Widget _chip(String label, Color color) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-    decoration: BoxDecoration(
-      color: color.withOpacity(0.88),
-      borderRadius: BorderRadius.circular(20),
-    ),
-    child: Text(
-      label,
-      style: const TextStyle(
-        color: Colors.white,
-        fontSize: 11,
-        fontWeight: FontWeight.w600,
       ),
     ),
   );
 
-  Widget _miniChip(String label, Color color) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-    decoration: BoxDecoration(
-      color: color.withOpacity(0.15),
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: color.withOpacity(0.4)),
+  Widget _secondaryBtn({required String label, required VoidCallback onTap}) =>
+      ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              decoration: BoxDecoration(
+                color: _glassBg,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: _glassBorder),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.folder_open_outlined,
+                      size: 18, color: Colors.white70),
+                  const SizedBox(width: 10),
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white70,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+  Widget _chip(String label, Color color) => ClipRRect(
+    borderRadius: BorderRadius.circular(20),
+    child: BackdropFilter(
+      filter: ui.ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.88),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: _glassBorder),
+          boxShadow: [
+            BoxShadow(
+              color: color.withOpacity(0.3),
+              blurRadius: 8,
+              spreadRadius: 0,
+            ),
+          ],
+        ),
+        child: Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
     ),
-    child: Text(
-      label,
-      style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w700),
+  );
+
+  Widget _miniChip(String label, Color color) => ClipRRect(
+    borderRadius: BorderRadius.circular(12),
+    child: BackdropFilter(
+      filter: ui.ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.15),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withOpacity(0.4)),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w700),
+        ),
+      ),
     ),
   );
 }
