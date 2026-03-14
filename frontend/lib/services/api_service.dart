@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'package:image/image.dart' as img;
+import 'package:flutter/foundation.dart';
 
 /// Backend URL
 const String kBaseUrl = 'https://ceph-saas-production.up.railway.app';
@@ -21,16 +22,23 @@ class ApiException implements Exception {
 
 // ── Image Processing ────────────────────────────────────────────────────────
 
-Uint8List _compressImage(Uint8List imageBytes) {
+/// Top-level function for use with compute() isolate
+Uint8List _compressImageIsolate(Uint8List imageBytes) {
   final decoded = img.decodeImage(imageBytes);
   if (decoded == null) return imageBytes;
-  
+
   img.Image processed = decoded;
   if (decoded.width > 1024) {
     processed = img.copyResize(decoded, width: 1024);
   }
-  
+
   return Uint8List.fromList(img.encodeJpg(processed, quality: 85));
+}
+
+/// Async wrapper that runs compression in background isolate
+Future<Uint8List> _compressImageAsync(Uint8List imageBytes) async {
+  // Use compute() to run on background isolate (prevents UI freeze)
+  return await compute(_compressImageIsolate, imageBytes);
 }
 
 // ── Diagnostic row model ───────────────────────────────────────────────────
@@ -155,7 +163,14 @@ class ApiService {
   ApiService._();
 
   /// Public image compression utility (matching the max 1024px upload).
-  static Uint8List compressImage(Uint8List bytes) => _compressImage(bytes);
+  /// Runs in background isolate to prevent UI freeze.
+  static Future<Uint8List> compressImageAsync(Uint8List bytes) async {
+    return await _compressImageAsync(bytes);
+  }
+
+  /// Synchronous image compression (kept for backward compatibility).
+  /// Note: Prefer compressImageAsync for better UI responsiveness.
+  static Uint8List compressImage(Uint8List bytes) => _compressImageIsolate(bytes);
 
   /// POST /analyze/full — initial analysis (runs PyTorch).
   /// Streams the parsed JSON immediately, then continues yielding updates
@@ -166,11 +181,15 @@ class ApiService {
     CalibrationData? calibration,
   }) async* {
     final uri = Uri.parse('$kBaseUrl/analyze/full');
+    
+    // Compress image in background before sending
+    final compressedBytes = await _compressImageAsync(imageBytes);
+    
     final req = http.MultipartRequest('POST', uri)
       ..files.add(
         http.MultipartFile.fromBytes(
           'file',
-          _compressImage(imageBytes),
+          compressedBytes,
           filename: filename,
           contentType: MediaType.parse(_mimeType(filename)),
         ),

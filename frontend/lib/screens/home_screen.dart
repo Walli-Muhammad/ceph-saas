@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -36,8 +37,41 @@ class _HomeScreenState extends State<HomeScreen>
   void dispose() {
     _glowController.dispose();
     _chatController.dispose();
+    _loadingMessageTimer?.cancel();
     super.dispose();
   }
+
+  // ── Loading messages for cycling ──────────────────────────────────────────
+  static const _loadingMessages = [
+    'Uploading Cephalogram...',
+    'Detecting Sella and Nasion...',
+    'Mapping Maxillary Landmarks...',
+    'Calculating SNA & SNB Angles...',
+    'Generating Clinical Report...',
+  ];
+
+  void _startLoadingMessageCycle() {
+    _loadingMessageIndex = 0;
+    _loadingMessageTimer?.cancel();
+    _loadingMessageTimer = Timer.periodic(
+      const Duration(milliseconds: 1500),
+      (timer) {
+        if (mounted && _isLoading) {
+          setState(() {
+            _loadingMessageIndex = (_loadingMessageIndex + 1) % _loadingMessages.length;
+          });
+        } else {
+          timer.cancel();
+        }
+      },
+    );
+  }
+
+  void _stopLoadingMessageCycle() {
+    _loadingMessageTimer?.cancel();
+    _loadingMessageTimer = null;
+  }
+
   // ── Analysis state ─────────────────────────────────────────────────────────
   Uint8List? _selectedBytes;
   String? _selectedFilename;
@@ -45,6 +79,10 @@ class _HomeScreenState extends State<HomeScreen>
   bool _isLoading = false;
   bool _isAdjusting = false;
   String? _errorText;
+
+  // Loading message cycling state
+  int _loadingMessageIndex = 0;
+  Timer? _loadingMessageTimer;
 
   /// Current landmark coordinates in native image pixels — mutated on drag.
   Map<String, ({double x, double y})>? _landmarks;
@@ -85,6 +123,8 @@ class _HomeScreenState extends State<HomeScreen>
     );
     if (picked == null || picked.files.isEmpty) return;
     final f = picked.files.first;
+    
+    // Immediately show loading state BEFORE heavy processing to prevent UI freeze
     setState(() {
       _selectedBytes = f.bytes;
       _selectedFilename = f.name;
@@ -94,8 +134,13 @@ class _HomeScreenState extends State<HomeScreen>
       _chatAnswer = null;
       _isChatLoading = false;
       _chatController.clear();
+      _isLoading = true;
     });
-    // Decode native image dimensions for accurate calibration mapping
+    
+    // Small delay to ensure UI paints the loading state before heavy processing
+    await Future.delayed(const Duration(milliseconds: 50));
+    
+    // Decode native image dimensions for accurate calibration mapping (heavy operation)
     if (f.bytes != null) {
       final codec = await ui.instantiateImageCodec(f.bytes!);
       final frame = await codec.getNextFrame();
@@ -103,9 +148,16 @@ class _HomeScreenState extends State<HomeScreen>
         setState(() {
           _nativeW = frame.image.width;
           _nativeH = frame.image.height;
+          _isLoading = false; // Done with processing, hide loading
         });
       }
       frame.image.dispose();
+    } else {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -296,6 +348,8 @@ class _HomeScreenState extends State<HomeScreen>
   // ── Analyze ───────────────────────────────────────────────────────────────
   Future<void> _analyze() async {
     if (_selectedBytes == null) return;
+    
+    // Step 1: Immediately set loading state
     setState(() {
       _isLoading = true;
       _errorText = null;
@@ -306,14 +360,23 @@ class _HomeScreenState extends State<HomeScreen>
       _isChatLoading = false;
       _chatController.clear();
     });
+
+    // Step 2: CRITICAL - Force a frame render so loading UI appears
+    // This prevents the 2-3 second freeze before loading screen shows
+    await Future.delayed(const Duration(milliseconds: 100));
     
+    if (!mounted) return;
+
+    // Step 3: Start cycling messages AFTER the delay ensures UI is painted
+    _startLoadingMessageCycle();
+
     try {
       final stream = ApiService.analyzeFull(
         imageBytes: _selectedBytes!,
         filename: _selectedFilename ?? 'image.jpg',
         calibration: _calibration,
       );
-      
+
       await for (final res in stream) {
         if (!mounted) break;
         setState(() {
@@ -322,11 +385,15 @@ class _HomeScreenState extends State<HomeScreen>
           _isLoading = false; // Hide loading spinner as soon as first chunk arrives
         });
       }
+      _stopLoadingMessageCycle();
     } on ApiException catch (e) {
+      _stopLoadingMessageCycle();
       if (mounted) setState(() => _errorText = e.message);
     } catch (e) {
+      _stopLoadingMessageCycle();
       if (mounted) setState(() => _errorText = 'Unexpected error: $e');
     } finally {
+      _stopLoadingMessageCycle();
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -334,23 +401,35 @@ class _HomeScreenState extends State<HomeScreen>
   // ── Adjust landmarks (re-render without PyTorch) ──────────────────────────
   Future<void> _adjustLandmarks() async {
     if (_selectedBytes == null || _landmarks == null || _result == null) return;
+    
     setState(() => _isAdjusting = true);
+    
+    // Force a frame render so loading overlay appears
+    await Future.delayed(const Duration(milliseconds: 50));
+    
+    if (!mounted) return;
+    
     try {
+      // Compress image in background before sending (prevents UI freeze)
+      final compressedBytes = await ApiService.compressImageAsync(_selectedBytes!);
+      
       final res = await ApiService.adjustLandmarks(
-        imageBytes: ApiService.compressImage(_selectedBytes!),
+        imageBytes: compressedBytes,
         filename: _selectedFilename ?? 'image.jpg',
         landmarks: _landmarks!,
       );
-      setState(() {
-        _result = res;
-        _landmarks = Map.from(res.landmarks);
-      });
+      if (mounted) {
+        setState(() {
+          _result = res;
+          _landmarks = Map.from(res.landmarks);
+        });
+      }
     } on ApiException catch (e) {
-      setState(() => _errorText = e.message);
+      if (mounted) setState(() => _errorText = e.message);
     } catch (e) {
-      setState(() => _errorText = 'Unexpected error: $e');
+      if (mounted) setState(() => _errorText = 'Unexpected error: $e');
     } finally {
-      setState(() => _isAdjusting = false);
+      if (mounted) setState(() => _isAdjusting = false);
     }
   }
 
@@ -1851,30 +1930,97 @@ class _HomeScreenState extends State<HomeScreen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            // Animated scanning circle with pulsing glow
             SizedBox(
-              width: 72,
-              height: 72,
-              child: CircularProgressIndicator(
-                strokeWidth: 4,
-                valueColor: AlwaysStoppedAnimation<Color>(_teal),
+              width: 100,
+              height: 100,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  // Pulsing outer glow
+                  AnimatedBuilder(
+                    animation: _glowAnimation,
+                    builder: (context, child) {
+                      return Container(
+                        width: 80 + (_glowAnimation.value * 20),
+                        height: 80 + (_glowAnimation.value * 20),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: RadialGradient(
+                            colors: [
+                              _teal.withOpacity(0.3 * _glowAnimation.value),
+                              _teal.withOpacity(0.1 * _glowAnimation.value),
+                              Colors.transparent,
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  // Inner scanning ring
+                  AnimatedBuilder(
+                    animation: _glowAnimation,
+                    builder: (context, child) {
+                      return Transform.rotate(
+                        angle: _glowAnimation.value * 2 * 3.14159,
+                        child: Container(
+                          width: 60,
+                          height: 60,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: _teal.withOpacity(0.8),
+                              width: 3,
+                            ),
+                          ),
+                          child: CustomPaint(
+                            painter: _ScannerArcPainter(
+                              progress: _glowAnimation.value,
+                              color: _teal,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  // Center X-ray icon placeholder
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: _teal.withOpacity(0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.image_outlined,
+                      color: _teal,
+                      size: 20,
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 24),
-            const Text(
-              'AI is analyzing X-ray...',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
+            const SizedBox(height: 28),
+            // Cycling status message
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 400),
+              child: Text(
+                _loadingMessages[_loadingMessageIndex],
+                key: ValueKey<int>(_loadingMessageIndex),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
-            const SizedBox(height: 8),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 40),
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 40),
               child: Text(
                 'The first inference can take up to 60 seconds while the GPU warms up.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white38, fontSize: 12),
+                style: TextStyle(color: Colors.white.withOpacity(0.38), fontSize: 12),
               ),
             ),
           ],
@@ -2393,4 +2539,38 @@ class _LoupePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _LoupePainter old) => false;
+}
+
+// Custom painter for the scanning arc animation
+class _ScannerArcPainter extends CustomPainter {
+  final double progress;
+  final Color color;
+
+  _ScannerArcPainter({required this.progress, required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 4
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2 - 4;
+
+    // Draw arc from 0 to progress * 360 degrees
+    final sweepAngle = progress * 2 * 3.14159;
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      -3.14159 / 2, // Start from top
+      sweepAngle,
+      false,
+      paint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _ScannerArcPainter old) =>
+      old.progress != progress || old.color != color;
 }
