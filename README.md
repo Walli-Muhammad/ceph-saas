@@ -1,8 +1,10 @@
 # Ceph-SaaS MVP
 
+
 AI-powered cephalometric analysis platform for orthodontic treatment planning.
 
 ## Project Overview
+<img src="https://img.sanishtech.com/u/a24fe98a25d5576a35d069e564cacc61.gif" alt="0314-ezgif.com-video-to-gif-converter" loading="lazy" style="max-width:100%;height:auto;">
 
 This project implements an end-to-end machine learning pipeline for automated cephalometric landmark detection using deep learning (U-Net architecture).
 
