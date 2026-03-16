@@ -548,7 +548,7 @@ def _ceph_visualize(self, image_bytes: bytes, filename: Optional[str] = None) ->
         if pa and pb:
             cv2.line(overlay, pa, pb, C_SAGITTAL, ln_t, cv2.LINE_AA)
 
-    # Vertical / measurement lines (red-pink, α=0.60)
+    # Vertical / measurement lines (red-pink, α=0.45)
     vertical_planes = [
         ("Nasion",    "Pogonion"),        # Facial Plane
         ("Sella",     "Gnathion"),        # Y-Axis
@@ -570,8 +570,8 @@ def _ceph_visualize(self, image_bytes: bytes, filename: Optional[str] = None) ->
         if pa and pb:
             cv2.line(overlay, pa, pb, C_DENTAL, ln_t, cv2.LINE_AA)
 
-    # Blend the overlay once — increased opacity (was 0.62)
-    cv2.addWeighted(overlay, 0.75, img_bgr, 0.25, 0, img_bgr)
+    # Blend the overlay once — decreased opacity (0.45) to let bones show through
+    cv2.addWeighted(overlay, 0.45, img_bgr, 0.55, 0, img_bgr)
 
     # ─────────────────────────────────────────────────────────────────────
     # LAYER 0.5 — Anatomical bone contours (landmark-based PCHIP splines)
@@ -579,8 +579,9 @@ def _ceph_visualize(self, image_bytes: bytes, filename: Optional[str] = None) ->
     # Instead of unreliable Canny edge detection, draw clean smooth curves
     # through the AI-predicted landmark positions — exactly how professional
     # cephalometric software renders bone tracings.
-    BONE_CYAN = (255, 220, 10)   # BGR ≡ RGB(10, 220, 255) — bright cyan
-    bone_t    = max(3, int(3.5 * scale))
+    # Skeletal outline (cyan)
+    BONE_CYAN = (246, 182, 41)   # BGR ≡ RGB(41, 182, 246)
+    bone_t    = max(2, int(2.0 * scale))
 
     # 1. Mandibular outline:  Co → Ar → Ra → Go → Me → Gn → Pog → B
     _draw_smooth_curve(
@@ -663,10 +664,9 @@ def _ceph_visualize(self, image_bytes: bytes, filename: Optional[str] = None) ->
             pt("Labrale Superius"),
             pt("Labrale Inferius"),
             pt("Soft Tissue Pog"),
-            pt("Gnathion"),
             pt("Menton"),
         ],
-        color=MINT, thickness=spline_t,
+        color=(153, 255, 102), thickness=max(1, int(1.5 * scale)), # Soft tissue: green
     )
 
     # Mandibular bony outline → cyan/teal
@@ -679,7 +679,7 @@ def _ceph_visualize(self, image_bytes: bytes, filename: Optional[str] = None) ->
             pt("Gnathion"),
             pt("Pogonion"),
         ],
-        color=CYAN, thickness=spline_t,
+        color=BONE_CYAN, thickness=bone_t,
     )
 
     # ─────────────────────────────────────────────────────────────────────
@@ -693,24 +693,62 @@ def _ceph_visualize(self, image_bytes: bytes, filename: Optional[str] = None) ->
     BORDER_COL  = (77, 228, 255)   # subtle yellow border
     stroke_r    = dot_r + stroke_w
 
-    # ── PASS A: compute all label positions ──────────────────────────────
+    # ── PASS A: compute label positions with collision avoidance ─────────
     lbl_positions = {}
+    placed_boxes = []  # list of (x1, y1, x2, y2)
+
+    def _boxes_intersect(b1, b2, clearance=30):
+        return not (b1[2] < b2[0] - clearance or 
+                    b1[0] > b2[2] + clearance or 
+                    b1[3] < b2[1] - clearance or 
+                    b1[1] > b2[3] + clearance)
+
     for name, (x, y) in landmarks.items():
         cx, cy = int(round(x)), int(round(y))
         abbrev = _LM_ABBREV.get(name, name[:3])
         (tw, th), baseline = cv2.getTextSize(abbrev, FONT, lbl_scl, lbl_thk)
 
-        # Offset: dx=+20px right, dy=-15px up from dot centre
-        off_x = max(20, int(20 * scale))
-        off_y = max(15, int(15 * scale))
-        # Flip to left if too close to right edge
-        if cx + off_x + tw > w - edge_margin:
-            off_x = -(tw + off_x)
-        # Flip below dot if too close to top edge
-        if cy - off_y - th < top_margin:
-            off_y = -(off_y + th + baseline)
+        # Candidates for dodging: [ (dx, dy) ]
+        offset_candidates = [
+            (20, 15),     # Default: right, up
+            (-20, 15),    # Left, up
+            (20, -15),    # Right, down
+            (-20, -15),   # Left, down
+            (0, 25),      # Straight up
+            (0, -25),     # Straight down
+            (35, 0),      # Far right
+            (-35, 0),     # Far left
+        ]
 
-        lbl_positions[name] = (cx + off_x, cy - off_y, tw, th, baseline)
+        placed = False
+        for base_dx, base_dy in offset_candidates:
+            off_x = int(base_dx * scale)
+            off_y = int(base_dy * scale)
+            
+            # Flip logic for screen edges
+            if cx + off_x + tw > w - edge_margin: off_x = -(tw + abs(off_x))  # Too far right
+            if cy - off_y - th < top_margin: off_y = -(abs(off_y) + th + baseline)  # Too far up
+            if cx + off_x < edge_margin: off_x = abs(off_x)  # Too far left
+            if cy - off_y + baseline > h - edge_margin: off_y = abs(off_y)  # Too far down
+
+            tx = cx + off_x
+            ty = cy - off_y
+            box = (tx, ty - th, tx + tw, ty + baseline)
+
+            # Check collision
+            collision = any(_boxes_intersect(box, pb) for pb in placed_boxes)
+            if not collision:
+                lbl_positions[name] = (tx, ty, tw, th, baseline)
+                placed_boxes.append(box)
+                placed = True
+                break
+        
+        # Fallback if no clear spot found — just use default and overlap
+        if not placed:
+            tx = cx + int(20 * scale)
+            ty = cy - int(15 * scale)
+            lbl_positions[name] = (tx, ty, tw, th, baseline)
+            placed_boxes.append((tx, ty - th, tx + tw, ty + baseline))
 
     # ── PASS B: (Removed pill backgrounds to reduce clutter) ─────────────
 
@@ -743,64 +781,78 @@ def _ceph_visualize(self, image_bytes: bytes, filename: Optional[str] = None) ->
         bar_y   = margin + int(8 * scale)
         bar_x1  = w - margin - bar_px
         bar_x2  = w - margin
-        tick_h  = max(4, int(6 * scale))
+        tick_h  = max(6, int(8 * scale))  # Clearer ticks
 
-        # Background pill for contrast
-        pad = max(4, int(5 * scale))
-        pill_tl = (bar_x1 - pad, bar_y - tick_h - pad)
-        pill_br = (bar_x2 + pad, bar_y + pad + int(lbl_scl * 18))
-        pill_ol = img_bgr.copy()
-        cv2.rectangle(pill_ol, pill_tl, pill_br, (30, 30, 30), -1)
-        cv2.addWeighted(pill_ol, 0.55, img_bgr, 0.45, 0, img_bgr)
-
-        # Bar line + ticks
-        bar_thk = max(1, int(1.5 * scale))
-        cv2.line(img_bgr, (bar_x1, bar_y), (bar_x2, bar_y), YELLOW, bar_thk, cv2.LINE_AA)
-        cv2.line(img_bgr, (bar_x1, bar_y - tick_h), (bar_x1, bar_y), YELLOW, bar_thk, cv2.LINE_AA)
-        cv2.line(img_bgr, (bar_x2, bar_y - tick_h), (bar_x2, bar_y), YELLOW, bar_thk, cv2.LINE_AA)
+        # Bar line + ticks (Yellow, 2px)
+        bar_thk = max(2, int(2.0 * scale))
+        bar_col = (64, 215, 255) # #FFD740 in BGR
+        
+        cv2.line(img_bgr, (bar_x1, bar_y), (bar_x2, bar_y), bar_col, bar_thk, cv2.LINE_AA)
+        cv2.line(img_bgr, (bar_x1, bar_y - tick_h//2), (bar_x1, bar_y + tick_h//2), bar_col, bar_thk, cv2.LINE_AA)
+        cv2.line(img_bgr, (bar_x2, bar_y - tick_h//2), (bar_x2, bar_y + tick_h//2), bar_col, bar_thk, cv2.LINE_AA)
 
         # Label centred above bar
         lbl_bar = f"{int(bar_mm)} mm"
         (tw, _th), _ = cv2.getTextSize(lbl_bar, FONT, lbl_scl, lbl_thk)
         lbl_bx = bar_x1 + (bar_px - tw) // 2
-        lbl_by = bar_y - tick_h - max(2, int(3 * scale))
-        cv2.putText(img_bgr, lbl_bar, (lbl_bx, lbl_by),
-                    FONT, lbl_scl, (30, 30, 30), lbl_thk + 1, cv2.LINE_AA)
-        cv2.putText(img_bgr, lbl_bar, (lbl_bx, lbl_by),
-                    FONT, lbl_scl, YELLOW, lbl_thk, cv2.LINE_AA)
+        lbl_by = bar_y - tick_h - max(4, int(5 * scale))
+        
+        # Soft shadow then yellow text
+        cv2.putText(img_bgr, lbl_bar, (lbl_bx+1, lbl_by+1), FONT, lbl_scl, (0, 0, 0), lbl_thk + 1, cv2.LINE_AA)
+        cv2.putText(img_bgr, lbl_bar, (lbl_bx, lbl_by), FONT, lbl_scl, bar_col, lbl_thk, cv2.LINE_AA)
     except Exception:
         pass   # scale bar is cosmetic — never crash for it
 
     # ─────────────────────────────────────────────────────────────────────
     # LAYER 5 — Measurement readout (bottom-left, semi-transparent panel)
     # ─────────────────────────────────────────────────────────────────────
-    meas_lines = [
-        f"SNA: {analysis['SNA']:.1f} deg",
-        f"SNB: {analysis['SNB']:.1f} deg",
-        f"ANB: {analysis['ANB']:.1f} deg",
-        f"MdL: {analysis.get('Mandibular Length (mm)', 0):.1f} mm",
-        f"MxL: {analysis.get('Maxillary Length (mm)', 0):.1f} mm",
+    meas_labels = [
+        "SNA", "SNB", "ANB", "MdL", "MxL"
     ]
-    meas_scl  = max(0.70, 0.95 * scale)
-    meas_thk  = max(2, int(2.2 * scale))
-    line_gap  = max(32, int(38 * scale))
+    meas_vals = [
+        f"{analysis['SNA']:.1f} deg",
+        f"{analysis['SNB']:.1f} deg",
+        f"{analysis['ANB']:.1f} deg",
+        f"{analysis.get('Mandibular Length (mm)', 0):.1f} mm",
+        f"{analysis.get('Maxillary Length (mm)', 0):.1f} mm",
+    ]
+    meas_scl  = max(0.65, 0.85 * scale)
+    meas_thk  = max(1, int(1.5 * scale))
+    line_gap  = max(28, int(32 * scale))
+    pad       = max(12, int(16 * scale))
     mx_margin = max(16, int(20 * scale))
-    panel_h   = len(meas_lines) * line_gap + mx_margin * 2
-    panel_w   = max(240, int(295 * scale))
+    
+    # Calculate box width dynamically
+    max_vw = max([cv2.getTextSize(v, FONT, meas_scl, meas_thk)[0][0] for v in meas_vals])
+    max_lw = max([cv2.getTextSize(l, FONT, meas_scl, meas_thk)[0][0] for l in meas_labels])
+    spacing   = max(16, int(24 * scale))
+    panel_w   = pad * 2 + max_lw + spacing + max_vw
+    panel_h   = pad * 2 + len(meas_labels) * line_gap - (line_gap//3)
     panel_y   = h - panel_h - mx_margin
 
-    # Semi-transparent dark panel
+    # Background card (black, α=0.72)
     meas_bg = img_bgr.copy()
-    cv2.rectangle(meas_bg, (mx_margin, panel_y),
-                  (mx_margin + panel_w, h - mx_margin), (25, 25, 25), -1)
-    cv2.addWeighted(meas_bg, 0.65, img_bgr, 0.35, 0, img_bgr)
+    box_tl = (mx_margin, panel_y)
+    box_br = (mx_margin + panel_w, panel_y + panel_h)
+    cv2.rectangle(meas_bg, box_tl, box_br, (0, 0, 0), -1)
+    cv2.addWeighted(meas_bg, 0.72, img_bgr, 0.28, 0, img_bgr)
+    
+    # Subtle border (white, α=0.12)
+    border_bg = img_bgr.copy()
+    cv2.rectangle(border_bg, box_tl, box_br, (255, 255, 255), max(1, int(1.2 * scale)))
+    cv2.addWeighted(border_bg, 0.12, img_bgr, 0.88, 0, img_bgr)
 
-    for i, txt in enumerate(meas_lines):
-        ty = panel_y + mx_margin + (i + 1) * line_gap
-        cv2.putText(img_bgr, txt, (mx_margin + 8, ty),
-                    FONT, meas_scl, (30, 30, 30), meas_thk + 1, cv2.LINE_AA)
-        cv2.putText(img_bgr, txt, (mx_margin + 8, ty),
-                    FONT, meas_scl, YELLOW, meas_thk, cv2.LINE_AA)
+    val_col = (64, 215, 255) # #FFD740
+    for i, (lbl, val) in enumerate(zip(meas_labels, meas_vals)):
+        ty = panel_y + pad + int(12*scale) + i * line_gap
+        
+        # White label
+        cv2.putText(img_bgr, lbl, (mx_margin + pad, ty), FONT, meas_scl, (255, 255, 255), meas_thk, cv2.LINE_AA)
+        
+        # Yellow right-aligned value
+        vw = cv2.getTextSize(val, FONT, meas_scl, meas_thk)[0][0]
+        vx = mx_margin + panel_w - pad - vw
+        cv2.putText(img_bgr, val, (vx, ty), FONT, meas_scl, val_col, meas_thk, cv2.LINE_AA)
 
     # ── Encode ────────────────────────────────────────────────────────────
     ok, buf = cv2.imencode(".jpg", img_bgr, [cv2.IMWRITE_JPEG_QUALITY, 93])

@@ -1495,6 +1495,27 @@ class _HomeScreenState extends State<HomeScreen>
       );
 
   // ── Annotated image + draggable landmark handles ──────────────────────────
+  // ── Landmark Color Categories ──────────────────────────────────────────────
+  Color _categoryFill(String name) {
+    if (name.contains('Incisor') || name.contains('Molar') || name.contains('PM') || name.contains('Occlusal')) {
+      return const Color(0xFFFFD740); // Dental
+    }
+    if (name.contains('Soft Tissue') || name.contains('Pronasale') || name.contains('Subnasale') || name.contains('Labrale')) {
+      return const Color(0xFFEF5350); // Soft Tissue
+    }
+    return const Color(0xFF29B6F6); // Skeletal (Default)
+  }
+
+  Color _categoryStroke(String name) {
+    if (name.contains('Incisor') || name.contains('Molar') || name.contains('PM') || name.contains('Occlusal')) {
+      return const Color(0xFFFFE57F); // Dental
+    }
+    if (name.contains('Soft Tissue') || name.contains('Pronasale') || name.contains('Subnasale') || name.contains('Labrale')) {
+      return const Color(0xFFFF8A80); // Soft Tissue
+    }
+    return const Color(0xFF81D4FA); // Skeletal (Default)
+  }
+
   Widget _annotatedImageWithNodes(Uint8List bytes) {
     return LayoutBuilder(
       builder: (ctx, constraints) {
@@ -1577,38 +1598,24 @@ class _HomeScreenState extends State<HomeScreen>
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
-                      // Solid red landmark dot (visible at all times)
+                      // Solid landmark dot with category colors
                       Container(
-                        width: 8,
-                        height: 8,
+                        width: 10,
+                        height: 10,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: Colors.redAccent,
+                          color: _categoryFill(name),
                           border: Border.all(
-                            color: Colors.white,
+                            color: _categoryStroke(name),
                             width: 1.5,
                           ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.redAccent.withOpacity(0.6),
-                              blurRadius: 6,
-                              spreadRadius: 0,
-                            ),
-                          ],
                         ),
                       ),
-                      // Larger glassy blue handle for dragging (hit target)
+                      // Invisible larger hit target
                       Container(
                         width: nodeSize,
                         height: nodeSize,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: _blue.withOpacity(0.4),
-                          border: Border.all(
-                            color: Colors.white.withOpacity(0.6),
-                            width: 1.0,
-                          ),
-                        ),
+                        color: Colors.transparent,
                       ),
                     ],
                   ),
@@ -1660,41 +1667,32 @@ class _HomeScreenState extends State<HomeScreen>
               child: Stack(
                 alignment: Alignment.center,
                 children: [
-                  // Solid red landmark dot in loupe
+                  // Solid landmark dot in loupe
                   Container(
-                    width: 8,
-                    height: 8,
+                    width: 10,
+                    height: 10,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: Colors.redAccent,
+                      color: _categoryFill(entry.key),
                       border: Border.all(
-                        color: Colors.white,
+                        color: _categoryStroke(entry.key),
                         width: 1.5,
                       ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.redAccent.withOpacity(0.6),
-                          blurRadius: 6,
-                          spreadRadius: 0,
-                        ),
-                      ],
                     ),
                   ),
-                  // Larger glassy blue handle for visibility
-                  Container(
-                    width: nodeSize,
-                    height: nodeSize,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: isActive
-                          ? _blue.withOpacity(0.5)
-                          : _blue.withOpacity(0.3),
-                      border: Border.all(
-                        color: isActive ? Colors.white : Colors.white54,
-                        width: isActive ? 1.5 : 1.0,
+                  // Highlight ring if active
+                  if (isActive)
+                    Container(
+                      width: nodeSize + 4,
+                      height: nodeSize + 4,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Colors.white,
+                          width: 1.5,
+                        ),
                       ),
                     ),
-                  ),
                 ],
               ),
             ));
